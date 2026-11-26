@@ -31,3 +31,10 @@ jobs:
           echo "HTTP $status"
           cat response.json; echo
           test "$status" = "200"
+      - name: Show site health
+        if: always()
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          [ -n "$SITE_URL" ] && curl -sS --max-time 30 "${SITE_URL%/}/api/health" || true
+          echo
