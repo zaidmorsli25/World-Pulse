@@ -35,3 +35,12 @@ describe("answer key", () => {
     expect(pub).not.toContain("evidence");
   });
 });
+
+describe("supabase url", () => {
+  it("accepts the REST endpoint the dashboard shows and keeps only the project URL", async () => {
+    const { normalizeSupabaseUrl } = await import("@/lib/server/env");
+    expect(normalizeSupabaseUrl(" https://abc.supabase.co/rest/v1/ ")).toBe("https://abc.supabase.co");
+    expect(normalizeSupabaseUrl("https://abc.supabase.co")).toBe("https://abc.supabase.co");
+    expect(normalizeSupabaseUrl("")).toBe("");
+  });
+});
