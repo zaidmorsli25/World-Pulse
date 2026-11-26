@@ -18,9 +18,17 @@ async function run(req: Request) {
   const expected = Buffer.from(sha256(`Bearer ${serverEnv.cronSecret}`), "hex");
   if (!serverEnv.cronSecret || !timingSafeEqual(given, expected)) throw new HttpError(401, "Unauthorized.", "unauthorized");
   const summarizer = serverEnv.anthropicKey ? new Summarizer(serverEnv.anthropicKey, serverEnv.anthropicModel) : null;
-  const report = await runIngestion(getStore(), { summarizer, log: console.info });
-  invalidateContent();
-  return json(report);
+  try {
+    const report = await runIngestion(getStore(), { summarizer, log: console.info });
+    invalidateContent();
+    return json(report);
+  } catch (e) {
+    // Only the scheduler (which holds CRON_SECRET) can see this, so report the cause to make
+    // failed runs diagnosable from its logs.
+    const err = e as { message?: string; code?: string; details?: string; hint?: string };
+    console.error("[ingest] failed", e);
+    return json({ error: "Ingestion failed.", cause: [err.message, err.code, err.details, err.hint].filter(Boolean).join(" | ") || String(e) }, 500);
+  }
 }
 
 export const GET = handler({ limit: 10 }, async ({ req }) => run(req));
