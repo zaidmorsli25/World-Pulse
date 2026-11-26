@@ -84,6 +84,12 @@ export function articlesBlock(articles: RawArticle[]): string {
     .join("\n");
 }
 
+/** Per-request limits, so a scheduled run can stop before its hosting time limit. */
+export interface RequestLimits {
+  timeout?: number;
+  maxRetries?: number;
+}
+
 export class Summarizer {
   private client: Anthropic;
   constructor(
@@ -93,7 +99,7 @@ export class Summarizer {
     this.client = new Anthropic({ apiKey });
   }
 
-  async generate(articles: RawArticle[], detectedCountries: string[]): Promise<GeneratedBriefing | null> {
+  async generate(articles: RawArticle[], detectedCountries: string[], req: RequestLimits = {}): Promise<GeneratedBriefing | null> {
     const figureList = FIGURES.map((f) => `${f.id} = ${f.name} (${f.position})`).join("\n");
     const countryHint = detectedCountries.map((id) => `${id} = ${(countries as { id: string; name: string }[]).find((c) => c.id === id)?.name}`).join(", ");
     const response = await this.client.messages.parse({
@@ -107,13 +113,13 @@ export class Summarizer {
           content: `Political figures directory (use these ids only):\n${figureList}\n\nCountries detected in the reporting: ${countryHint || "none"}\n\nReporting from approved publications:\n${articlesBlock(articles)}\n\nWrite the briefing and quiz as JSON.`,
         },
       ],
-    });
+    }, req);
     if (response.stop_reason === "refusal") return null;
     return response.parsed_output ?? null;
   }
 
   /** Second pass: flags claims not supported by the reporting and quiz answers not taught by the briefing. */
-  async verify(articles: RawArticle[], b: GeneratedBriefing) {
+  async verify(articles: RawArticle[], b: GeneratedBriefing, req: RequestLimits = {}) {
     const claims = [
       ...b.whatHappened.map((c, i) => ({ id: `wh${i}`, c })),
       ...b.background.map((c, i) => ({ id: `bg${i}`, c })),
@@ -134,7 +140,7 @@ export class Summarizer {
             .join("\n")}`,
         },
       ],
-    });
+    }, req);
     if (response.stop_reason === "refusal" || !response.parsed_output) return null;
     return response.parsed_output;
   }

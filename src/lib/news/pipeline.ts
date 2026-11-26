@@ -23,7 +23,14 @@ export interface IngestReport {
   articles: number;
   relevant: number;
   clusters: number;
+  /** stories newly summarized in this run */
   published: number;
+  /** stories whose reporting had not changed, so their briefing was kept */
+  reused: number;
+  /** stories left for the next run because of the time budget */
+  deferred: number;
+  /** stories live on the map after this run */
+  live: number;
   rejected: { title: string; reason: string }[];
   updatedAt: string;
 }
@@ -32,6 +39,10 @@ export interface IngestOptions {
   summarizer: Summarizer | null;
   now?: Date;
   maxEvents?: number;
+  /** stop starting new briefings after this many ms (default WP_INGEST_BUDGET_SECONDS) */
+  budgetMs?: number;
+  /** briefings generated in parallel (default WP_INGEST_CONCURRENCY) */
+  concurrency?: number;
   log?: (msg: string) => void;
 }
 
@@ -110,7 +121,8 @@ export function buildEvent(c: Cluster, g: GeneratedBriefing, now: Date): { event
 export async function runIngestion(store: Store, opts: IngestOptions): Promise<IngestReport> {
   const now = opts.now ?? new Date();
   const log = opts.log ?? (() => {});
-  const report: IngestReport = { feeds: [], articles: 0, relevant: 0, clusters: 0, published: 0, rejected: [], updatedAt: now.toISOString() };
+  const report: IngestReport = { feeds: [], articles: 0, relevant: 0, clusters: 0, published: 0, reused: 0, deferred: 0, live: 0, rejected: [], updatedAt: now.toISOString() };
+  const maxEvents = opts.maxEvents ?? NEWS.maxEvents;
 
   const results = await Promise.allSettled(configuredFeeds().map(async (f) => ({ f, items: await fetchFeed(f) })));
   let all: RawArticle[] = [];
@@ -140,51 +152,124 @@ export async function runIngestion(store: Store, opts: IngestOptions): Promise<I
   const ranked = clusters
     .map((c) => ({ c, pre: scoreImportance({ ...clusterSignals(c, now), consequences: 0.5, significance: 0.5, category: categorize(c.articles[0].headline) }).score }))
     .sort((a, b) => b.pre - a.pre)
-    .slice(0, opts.maxEvents ?? NEWS.maxEvents);
+    .slice(0, maxEvents);
+
+  // Work incrementally: stories whose reporting has not changed keep their existing briefing, and
+  // new ones are summarized a few at a time within a time budget. Anything not reached is picked
+  // up by the next run, so a run never exceeds the host's function time limit and never loses work.
+  const previous = (await store.getLiveNews()) ?? { events: [], quizzes: [], updatedAt: null };
+  const prevQuiz = new Map(previous.quizzes.map((q) => [q.id, q]));
+  const prevByUrl = new Map<string, NewsEvent>();
+  for (const e of previous.events) for (const src of e.sources) if (src.url) prevByUrl.set(src.url, e);
 
   const events: NewsEvent[] = [];
   const quizzes: Quiz[] = [];
   const articleEvent = new Map<string, string>();
+  const usedPrev = new Set<string>();
+  const add = (event: NewsEvent, quiz: Quiz | undefined, c: Cluster) => {
+    if (events.some((e) => e.id === event.id)) return;
+    events.push(event);
+    if (quiz) quizzes.push(quiz);
+    for (const a of c.articles) articleEvent.set(a.id, event.id);
+  };
+
+  const todo: Cluster[] = [];
   for (const { c } of ranked) {
-    const title = c.articles[0].headline;
-    try {
-      const g = await opts.summarizer.generate(c.articles, c.countries);
-      if (!g) {
-        report.rejected.push({ title, reason: "model declined" });
+    const urls = c.articles.filter((a) => !a.syndicatedFrom).map((a) => a.url);
+    const prev = urls.length ? prevByUrl.get(urls[0]) : undefined;
+    if (prev && urls.every((u) => prevByUrl.get(u)?.id === prev.id)) {
+      const quiz = prevQuiz.get(prev.quizId);
+      if (quiz) {
+        const signals = clusterSignals(c, now);
+        const b = prev.importance.breakdown;
+        const importance = b && typeof b.consequences === "number" && typeof b.significance === "number"
+          ? scoreImportance({ ...signals, consequences: b.consequences, significance: b.significance, category: prev.category })
+          : prev.importance;
+        usedPrev.add(prev.id);
+        add({ ...prev, importance }, quiz, c);
+        report.reused++;
         continue;
       }
-      const v = await opts.summarizer.verify(c.articles, g);
-      if (v) {
-        const verdict = new Map(v.claims.map((x) => [x.id, x.verdict]));
-        const keep = (prefix: string, allowBackground: boolean) => (_: unknown, i: number) => {
-          const vd = verdict.get(`${prefix}${i}`);
-          return vd === "supported" || (allowBackground && vd === "established_background") || vd === undefined;
-        };
-        g.whatHappened = g.whatHappened.filter(keep("wh", false));
-        g.background = g.background.filter(keep("bg", true));
-        g.whyItMatters = g.whyItMatters.filter(keep("wm", true));
-        g.whatNext = g.whatNext.filter(keep("wn", true));
-        const badQ = new Set(v.questions.filter((q) => !q.valid).map((q) => q.index));
-        g.questions = g.questions.filter((_, i) => !badQ.has(i));
-      }
-      const built = buildEvent(c, g, now);
-      if ("reason" in built) {
-        report.rejected.push({ title, reason: built.reason });
-        continue;
-      }
-      events.push(built.event);
-      quizzes.push(built.quiz);
-      for (const a of c.articles) articleEvent.set(a.id, built.event.id);
-      log(`[ingest] published: ${built.event.title} (${built.event.importance.tier} ${built.event.importance.score})`);
-    } catch (e) {
-      report.rejected.push({ title, reason: `error: ${(e as Error).message}` });
     }
+    todo.push(c);
   }
-  report.published = events.length;
-  if (events.length) {
-    const news: LiveNews = { events: events.sort((a, b) => b.importance.score - a.importance.score), quizzes, updatedAt: now.toISOString() };
+
+  const started = Date.now();
+  const startBudget = opts.budgetMs ?? NEWS.ingestBudgetSeconds * 1000;
+  const hardStop = started + startBudget + 75_000;
+  const summarizer = opts.summarizer;
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      if (Date.now() - started > startBudget) return;
+      const c = todo[next++];
+      const title = c.articles[0].headline;
+      const limits = () => ({ timeout: Math.max(5_000, hardStop - Date.now()), maxRetries: 1 });
+      try {
+        const g = await summarizer.generate(c.articles, c.countries, limits());
+        if (!g) {
+          report.rejected.push({ title, reason: "model declined" });
+          continue;
+        }
+        if (Date.now() > hardStop - 5_000) {
+          report.deferred++;
+          continue;
+        }
+        const v = await summarizer.verify(c.articles, g, limits());
+        if (v) {
+          const verdict = new Map(v.claims.map((x) => [x.id, x.verdict]));
+          const keep = (prefix: string, allowBackground: boolean) => (_: unknown, i: number) => {
+            const vd = verdict.get(`${prefix}${i}`);
+            return vd === "supported" || (allowBackground && vd === "established_background") || vd === undefined;
+          };
+          g.whatHappened = g.whatHappened.filter(keep("wh", false));
+          g.background = g.background.filter(keep("bg", true));
+          g.whyItMatters = g.whyItMatters.filter(keep("wm", true));
+          g.whatNext = g.whatNext.filter(keep("wn", true));
+          const badQ = new Set(v.questions.filter((q) => !q.valid).map((q) => q.index));
+          g.questions = g.questions.filter((_, i) => !badQ.has(i));
+        }
+        const built = buildEvent(c, g, now);
+        if ("reason" in built) {
+          report.rejected.push({ title, reason: built.reason });
+          continue;
+        }
+        for (const a of c.articles) {
+          const old = prevByUrl.get(a.url);
+          if (old) usedPrev.add(old.id);
+        }
+        add(built.event, built.quiz, c);
+        report.published++;
+        log(`[ingest] published: ${built.event.title} (${built.event.importance.tier} ${built.event.importance.score})`);
+      } catch (e) {
+        report.rejected.push({ title, reason: `error: ${(e as Error).message}` });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, opts.concurrency ?? NEWS.ingestConcurrency) }, worker));
+  report.deferred += todo.length - Math.min(next, todo.length);
+
+  // Keep earlier stories that are still recent and were not replaced by a newer briefing.
+  for (const e of previous.events) {
+    if (usedPrev.has(e.id) || events.some((x) => x.id === e.id)) continue;
+    const latest = Math.max(...e.sources.map((src) => Date.parse(src.publishedAt)).filter(Number.isFinite), Date.parse(e.eventDate));
+    if (latest < cutoff) continue;
+    const quiz = prevQuiz.get(e.quizId);
+    if (!quiz) continue;
+    events.push(e);
+    quizzes.push(quiz);
+  }
+  events.sort((a, b) => b.importance.score - a.importance.score);
+  const kept = events.slice(0, maxEvents);
+  const keptIds = new Set(kept.map((e) => e.id));
+  report.live = kept.length;
+  if (kept.length) {
+    const news: LiveNews = { events: kept, quizzes: quizzes.filter((q) => keptIds.has(q.eventId)), updatedAt: now.toISOString() };
     await store.saveLiveNews(news, toStored(all, articleEvent, now));
+  } else {
+    await store.saveLiveNews(previous, toStored(all, articleEvent, now));
   }
+  log(`[ingest] ${report.published} new, ${report.reused} unchanged, ${report.deferred} left for the next run, ${report.live} live`);
   return report;
 }
 

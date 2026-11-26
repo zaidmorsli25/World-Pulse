@@ -59,4 +59,8 @@ export const NEWS = {
   refreshMinutes: num(env.WP_NEWS_REFRESH_MINUTES, 60),
   maxArticleAgeHours: num(env.WP_NEWS_MAX_AGE_HOURS, 72),
   maxEvents: num(env.WP_NEWS_MAX_EVENTS, 40),
+  /** Seconds a scheduled run may spend starting new briefings (keeps it inside the host's time limit). */
+  ingestBudgetSeconds: num(env.WP_INGEST_BUDGET_SECONDS, 170),
+  /** Briefings generated in parallel. */
+  ingestConcurrency: num(env.WP_INGEST_CONCURRENCY, 4),
 };
