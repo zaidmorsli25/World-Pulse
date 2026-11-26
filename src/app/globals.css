@@ -1,0 +1,105 @@
+@import "@fontsource-variable/fredoka/index.css";
+@import "@fontsource-variable/inter/index.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ocean-deep: #1a5c96;
+  --ocean: #2d86cc;
+  --land: #7dba67;
+  --hud: rgba(10, 21, 38, 0.82);
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+  background: #0d1a2e;
+  color: #0d1a2e;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: "Inter Variable", Inter, system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* Visible keyboard focus everywhere */
+:focus-visible {
+  outline: 3px solid #f7c552;
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 font-display font-semibold tracking-wide transition-all duration-150 select-none disabled:cursor-not-allowed disabled:opacity-50;
+    box-shadow: 0 4px 0 0 rgba(8, 17, 31, 0.35), inset 0 2px 0 rgba(255, 255, 255, 0.25);
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 0 rgba(8, 17, 31, 0.35), inset 0 2px 0 rgba(255, 255, 255, 0.2);
+  }
+  .btn:hover:not(:disabled) {
+    filter: brightness(1.07);
+  }
+  .btn-primary {
+    @apply bg-gradient-to-b from-gold-400 to-gold-500 text-navy-900;
+  }
+  .btn-blue {
+    @apply bg-gradient-to-b from-ocean-400 to-ocean-600 text-white;
+  }
+  .btn-green {
+    @apply bg-gradient-to-b from-land-400 to-land-600 text-white;
+  }
+  .btn-ghost {
+    @apply bg-white/80 text-navy-800;
+  }
+  .btn-dark {
+    @apply bg-gradient-to-b from-navy-700 to-navy-800 text-white;
+  }
+  .panel {
+    @apply rounded-3xl bg-parchment-50 shadow-game;
+  }
+  .hud-pill {
+    @apply flex items-center gap-2 rounded-2xl px-3 py-1.5 text-white shadow-game;
+    background: var(--hud);
+    backdrop-filter: blur(8px);
+  }
+  .input {
+    @apply w-full rounded-xl border-2 border-parchment-200 bg-white px-4 py-2.5 text-navy-900 outline-none transition focus:border-ocean-400;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(13, 26, 46, 0.25) transparent;
+  }
+}
+
+/* Map */
+.country {
+  transition: fill 160ms ease;
+}
+.country:hover {
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
