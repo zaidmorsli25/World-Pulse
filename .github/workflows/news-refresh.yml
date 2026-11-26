@@ -1,6 +1,6 @@
-# Hourly news refresh.
+# News refresh every 3 hours.
 # Vercel's free (Hobby) plan only allows daily cron jobs, so GitHub Actions calls the
-# ingestion endpoint every hour instead. vercel.json keeps a daily run as a backup.
+# ingestion endpoint every 3 hours instead. vercel.json keeps a daily run as a backup.
 #
 # Needs two repository secrets (Settings > Secrets and variables > Actions):
 #   SITE_URL     e.g. https://worldpulse.vercel.app (no trailing slash)
@@ -9,7 +9,7 @@ name: News refresh
 
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "17 */3 * * *"
   workflow_dispatch:
 
 jobs:

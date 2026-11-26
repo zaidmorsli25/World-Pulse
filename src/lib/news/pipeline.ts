@@ -175,9 +175,23 @@ export async function runIngestion(store: Store, opts: IngestOptions): Promise<I
 
   const todo: Cluster[] = [];
   for (const { c } of ranked) {
-    const urls = c.articles.filter((a) => !a.syndicatedFrom).map((a) => a.url);
-    const prev = urls.length ? prevByUrl.get(urls[0]) : undefined;
-    if (prev && urls.every((u) => prevByUrl.get(u)?.id === prev.id)) {
+    const own = c.articles.filter((a) => !a.syndicatedFrom);
+    const urls = own.map((a) => a.url);
+    // The earlier event that most of this story's reporting already belongs to, if any.
+    const counts = new Map<string, number>();
+    for (const u of urls) {
+      const id = prevByUrl.get(u)?.id;
+      if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    const [bestId, matched] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+    const prev = bestId ? previous.events.find((e) => e.id === bestId) : undefined;
+    const fresh = urls.length - matched;
+    const briefingAgeHours = prev ? (now.getTime() - Date.parse(prev.updatedAt)) / 3600_000 : Infinity;
+    // Keep the existing briefing unless the story has substantially grown, or it has new
+    // reporting and the briefing is more than a day old. This avoids paying to rewrite a
+    // briefing every time one more article joins a story.
+    const keepBriefing = prev && matched / Math.max(1, urls.length) >= 0.5 && (fresh === 0 || briefingAgeHours < NEWS.rewriteAfterHours);
+    if (prev && keepBriefing) {
       const quiz = prevQuiz.get(prev.quizId);
       if (quiz) {
         const signals = clusterSignals(c, now);
@@ -185,8 +199,13 @@ export async function runIngestion(store: Store, opts: IngestOptions): Promise<I
         const importance = b && typeof b.consequences === "number" && typeof b.significance === "number"
           ? scoreImportance({ ...signals, consequences: b.consequences, significance: b.significance, category: prev.category })
           : prev.importance;
+        const known = new Set(prev.sources.map((src) => src.url));
+        const sources = [
+          ...prev.sources,
+          ...own.filter((a) => !known.has(a.url)).map((a) => ({ id: a.id, publication: a.publication, headline: a.headline, url: a.url, publishedAt: a.publishedAt })),
+        ].sort((x, y) => Date.parse(y.publishedAt) - Date.parse(x.publishedAt));
         usedPrev.add(prev.id);
-        add({ ...prev, importance }, quiz, c);
+        add({ ...prev, importance, sources }, quiz, c);
         report.reused++;
         continue;
       }

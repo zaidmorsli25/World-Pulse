@@ -21,7 +21,7 @@ export const serverEnv = {
   supabaseServiceKey: (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim(),
   authSecret: process.env.AUTH_SECRET || "",
   anthropicKey: (process.env.ANTHROPIC_API_KEY || "").trim(),
-  anthropicModel: process.env.WP_SUMMARY_MODEL || "claude-opus-5-5",
+  anthropicModel: process.env.WP_SUMMARY_MODEL || "claude-haiku-5-5",
   cronSecret: (process.env.CRON_SECRET || "").trim(),
   /** "auto" (live when available, else demo), "demo" (always demo), "live" (never show demo). */
   newsMode: (process.env.WP_NEWS_MODE || "auto") as "auto" | "demo" | "live",

@@ -30,7 +30,7 @@ No configuration is needed to play locally. Accounts are stored in `data/local-d
 | Production sessions | `AUTH_SECRET` | Production server refuses to start sessions |
 | Real accounts, email confirmation and password reset emails | Supabase project (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) and the SQL migration | Local JSON file; reset links are shown on screen in development only |
 | Live news briefings and quizzes | `ANTHROPIC_API_KEY` | Demo scenarios |
-| Scheduled refresh | `CRON_SECRET` (and a scheduler; `vercel.json` runs hourly on Vercel) | Run `npm run ingest` manually |
+| Scheduled refresh | `CRON_SECRET` (and a scheduler; a GitHub Actions workflow runs it every 3 hours, plus a daily Vercel cron) | Run `npm run ingest` manually |
 | Reuters | A licensed feed URL in `REUTERS_FEED_URL` | Reuters is skipped |
 | Commercial use of publisher feeds | Check each publisher's feed terms; some require a licence | |
 
@@ -40,7 +40,7 @@ Every variable is documented in [`.env.example`](.env.example).
 
 1. Create a Supabase project. In the SQL editor, run `supabase/migrations/0001_worldpulse.sql`. Enable Email auth and set the Site URL to your domain.
 2. Import the repository into Vercel. Set `AUTH_SECRET`, `NEXT_PUBLIC_SITE_URL`, the three Supabase variables, `ANTHROPIC_API_KEY` and `CRON_SECRET`.
-3. Deploy. On Vercel's free plan, cron jobs may run only once a day, so `vercel.json` runs `/api/cron/ingest` daily and `.github/workflows/news-refresh.yml` calls it every hour (set the `SITE_URL` and `CRON_SECRET` repository secrets). Trigger the first run manually:
+3. Deploy. On Vercel's free plan, cron jobs may run only once a day, so `vercel.json` runs `/api/cron/ingest` daily and `.github/workflows/news-refresh.yml` calls it every 3 hours (set the `SITE_URL` and `CRON_SECRET` repository secrets). Trigger the first run manually:
    `curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/ingest`
 4. Check `/api/health`, which reports the database, news mode and whether the summarizer is configured.
 

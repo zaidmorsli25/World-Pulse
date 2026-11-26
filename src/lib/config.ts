@@ -63,4 +63,6 @@ export const NEWS = {
   ingestBudgetSeconds: num(env.WP_INGEST_BUDGET_SECONDS, 170),
   /** Briefings generated in parallel. */
   ingestConcurrency: num(env.WP_INGEST_CONCURRENCY, 4),
+  /** A story with new reporting keeps its briefing until the briefing is this many hours old. */
+  rewriteAfterHours: num(env.WP_NEWS_REWRITE_AFTER_HOURS, 24),
 };

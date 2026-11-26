@@ -63,6 +63,19 @@ describe("incremental ingestion", () => {
     expect(saved.at(-1)?.news.events.map((e) => e.id)).toEqual(["ev-prev"]);
   });
 
+  it("keeps a recent briefing when one more article joins the story", async () => {
+    const rss2 = rss.replace("</channel>", `<item><title>France and Germany sign defence treaty at Paris summit as leaders meet</title><link>https://www.bbc.co.uk/news/world-europe-2</link>
+<description>France and Germany agreed a defence pact at a Paris summit.</description><pubDate>${new Date(NOW.getTime() - 1800_000).toUTCString()}</pubDate></item></channel>`);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(rss2, { status: 200 })));
+    const generate = vi.fn();
+    const { store, saved } = memoryStore({ events: [prevEvent], quizzes: [prevQuiz], updatedAt: null });
+    const report = await runIngestion(store, { summarizer: { generate, verify: vi.fn() } as unknown as Summarizer, now: NOW });
+    expect(report.clusters).toBe(1);
+    expect(report.reused).toBe(1);
+    expect(generate).not.toHaveBeenCalled();
+    expect(saved.at(-1)?.news.events[0].sources).toHaveLength(2);
+  });
+
   it("leaves new stories for the next run when the time budget is spent, and keeps what is live", async () => {
     const generate = vi.fn();
     const old = { ...prevEvent, id: "ev-old", sources: [{ ...prevEvent.sources[0], url: "https://www.bbc.co.uk/news/other" }], quizId: "q-old" };

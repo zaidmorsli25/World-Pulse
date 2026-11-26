@@ -11,7 +11,7 @@ export const maxDuration = 300;
 
 /**
  * Scheduled news refresh. Call with `Authorization: Bearer $CRON_SECRET` (Vercel Cron sends this
- * header automatically when CRON_SECRET is set). See vercel.json for the default hourly schedule.
+ * header automatically when CRON_SECRET is set). GitHub Actions (.github/workflows/news-refresh.yml) calls it every 3 hours; vercel.json adds a daily run.
  */
 async function run(req: Request) {
   const given = Buffer.from(sha256(req.headers.get("authorization") ?? ""), "hex");
