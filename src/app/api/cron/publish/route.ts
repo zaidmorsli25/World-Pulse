@@ -15,6 +15,8 @@ export const maxDuration = 120;
 const MAX_RUN_AGE_HOURS = 3;
 
 const ExtraSource = z.object({
+  /** short label the briefing's claims use to cite this source, e.g. "x1" */
+  ref: z.string().max(40).optional(),
   publication: z.enum(APPROVED_PUBLICATIONS),
   headline: z.string().min(5).max(300),
   url: z.string().url().max(1000),
@@ -72,6 +74,7 @@ export const POST = handler({ limit: 10, body: Body }, async ({ req, body }) => 
     }
     // Extra reporting is accepted only from the six approved publications, on their own domains.
     const extras: RawArticle[] = [];
+    const refs = new Map<string, string>();
     const skipped: string[] = [];
     for (const raw of b.extraSources) {
       const x = ExtraSource.safeParse(raw);
@@ -79,7 +82,12 @@ export const POST = handler({ limit: 10, body: Body }, async ({ req, body }) => 
         skipped.push(typeof raw === "object" && raw && "url" in raw ? String((raw as { url: unknown }).url) : "invalid source");
         continue;
       }
-      if (p.articles.some((a) => a.url === x.data.url) || extras.some((a) => a.url === x.data.url)) continue;
+      const existing = [...p.articles, ...extras].find((a) => a.url === x.data.url);
+      if (existing) {
+        if (x.data.ref) refs.set(x.data.ref, existing.id);
+        continue;
+      }
+      if (x.data.ref) refs.set(x.data.ref, stableId(x.data.url));
       extras.push({
         id: stableId(x.data.url),
         publication: x.data.publication,
@@ -92,8 +100,11 @@ export const POST = handler({ limit: 10, body: Body }, async ({ req, body }) => 
         syndicatedFrom: null,
       });
     }
+    // Claims may cite extra sources by their ref; map refs to the stored article ids.
+    const g = parsed.data;
+    for (const list of [g.whatHappened, g.background, g.whyItMatters, g.whatNext]) for (const c of list) c.sources = c.sources.map((id) => refs.get(id) ?? id);
     const story: PendingCluster = { ...p, articles: [...p.articles, ...extras] };
-    const result = buildStory(story, parsed.data, now);
+    const result = buildStory(story, g, now);
     if ("reason" in result) {
       run.report.rejected.push({ title, reason: result.reason });
       notes.push({ id: p.id, title, result: `rejected: ${result.reason}` });
