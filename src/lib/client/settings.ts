@@ -10,9 +10,11 @@ export interface Settings {
   motion: "system" | "reduced" | "full";
   showLabels: boolean;
   showGraticule: boolean;
+  /** keep trend lines on the map without hovering a marker */
+  trendLinesAlways: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { sfxOn: true, musicOn: false, sfxVolume: 0.6, musicVolume: 0.35, motion: "system", showLabels: true, showGraticule: true };
+export const DEFAULT_SETTINGS: Settings = { sfxOn: true, musicOn: false, sfxVolume: 0.6, musicVolume: 0.35, motion: "system", showLabels: true, showGraticule: true, trendLinesAlways: false };
 const KEY = "worldpulse-settings";
 
 /** Per-device preferences (audio, motion, map display). Stored in localStorage when available. */

@@ -21,7 +21,7 @@ const anonClient = () => createClient(serverEnv.supabaseUrl, serverEnv.supabaseA
 /** Returns the new user id, or null when the account needs email confirmation first. */
 export async function signUp(email: string, username: string, password: string, origin = ""): Promise<{ userId: string | null; needsConfirmation: boolean; pendingUserId?: string }> {
   email = email.trim().toLowerCase();
-  if (!USERNAME_RE.test(username)) throw new HttpError(400, "Usernames are 3–20 letters, numbers, dots, dashes or underscores.", "bad_username");
+  if (!USERNAME_RE.test(username)) throw new HttpError(400, "Usernames are 3 to 20 letters, numbers, dots, dashes or underscores.", "bad_username");
   validatePassword(password);
   const store = getStore();
   if (await store.findUserByUsername(username)) throw new HttpError(409, "That username is taken.", "username_taken");

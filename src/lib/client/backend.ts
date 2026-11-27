@@ -1,5 +1,6 @@
 // Client-side API. The normal build talks to the Next.js API routes; the standalone demo build
 // swaps in an in-browser backend (same game engine, progress saved in this browser only).
+import type { PublicTrend } from "@/lib/trends";
 import type { AvatarConfig, GameEvents, NewsEvent, PlayerState, PublicQuiz } from "@/lib/types";
 
 export interface Me {
@@ -14,6 +15,8 @@ export interface NewsPayload {
   events: NewsEvent[];
   /** Coins a perfect first attempt pays, per event id (computed server-side from the quiz). */
   maxCoins?: Record<string, number>;
+  /** approved trends linking several stories (demo trends in demo mode) */
+  trends?: PublicTrend[];
 }
 export interface PlayerUpdate {
   player: PlayerState;

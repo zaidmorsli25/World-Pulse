@@ -4,6 +4,7 @@ import { ACHIEVEMENTS_BY_ID } from "@/lib/game/achievements";
 import { getBackend, type Backend, type Me, type NewsPayload, type PlayerUpdate } from "@/lib/client/backend";
 import { useSettings, type Settings } from "@/lib/client/settings";
 import { sound } from "@/lib/client/sound";
+import type { PublicTrend } from "@/lib/trends";
 import type { GameEvents, NewsEvent, PlayerState } from "@/lib/types";
 
 export type Section = "map" | "briefing" | "figures" | "hq" | "shop" | "achievements" | "profile" | "settings";
@@ -49,6 +50,14 @@ interface Ctx {
   celebration: Celebration | null;
   clearCelebration: () => void;
   eventsById: Map<string, NewsEvent>;
+  /** approved trends players can see */
+  trends: PublicTrend[];
+  /** the trend picked in the lens (chip row), if any */
+  lensTrendId: string | null;
+  setLensTrend: (id: string | null) => void;
+  /** the trend whose big-picture briefing is open */
+  bigPictureId: string | null;
+  openBigPicture: (id: string | null) => void;
   logout: () => Promise<void>;
   reloadNews: () => void;
 }
@@ -76,6 +85,8 @@ export function GameProvider({ backend, initial, onLogout, children }: { backend
   const [countryId, setCountryId] = useState<string | null>(null);
   const [figureId, setFigureId] = useState<string | null>(null);
   const [focusCountry, setFocusCountry] = useState<{ id: string; nonce: number } | null>(null);
+  const [lensTrendId, setLensTrendId] = useState<string | null>(null);
+  const [bigPictureId, setBigPictureId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const toastId = useRef(0);
@@ -162,6 +173,7 @@ export function GameProvider({ backend, initial, onLogout, children }: { backend
   }, []);
 
   const eventsById = useMemo(() => new Map((news?.events ?? []).map((e) => [e.id, e])), [news]);
+  const trends = useMemo(() => news?.trends ?? [], [news]);
 
   const value: Ctx = {
     backend,
@@ -207,6 +219,17 @@ export function GameProvider({ backend, initial, onLogout, children }: { backend
     celebration,
     clearCelebration: () => setCelebration(null),
     eventsById,
+    trends,
+    lensTrendId,
+    setLensTrend: (id) => {
+      sound.play("click");
+      setLensTrendId(id);
+    },
+    bigPictureId,
+    openBigPicture: (id) => {
+      if (id) sound.play("open");
+      setBigPictureId(id);
+    },
     logout: async () => {
       await backend.logout().catch(() => {});
       onLogout();

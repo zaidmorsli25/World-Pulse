@@ -7,7 +7,9 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRY_BY_ID, useWorld } from "@/lib/client/world";
 import type { NewsEvent } from "@/lib/types";
 import { NavIcon } from "../ui/icons";
+import type { PublicTrend } from "@/lib/trends";
 import { MarkerLayer, positionMarkers } from "./Markers";
+import { leadStory, TrendLines, visibleLinks, type Thread } from "./TrendLines";
 
 const LAND_TONES = ["#7dba67", "#86c06e", "#74b161", "#8fc677", "#7ab565", "#93c97c"];
 const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -22,6 +24,10 @@ export interface MapProps {
   regionFocus: { region: string; nonce: number } | null;
   showLabels: boolean;
   showGraticule: boolean;
+  trends: PublicTrend[];
+  /** the trend picked in the lens */
+  lensTrendId: string | null;
+  trendLinesAlways: boolean;
 }
 
 const REGION_BOXES: Record<string, [[number, number], [number, number]]> = {
@@ -53,6 +59,9 @@ function WorldMapInner(p: MapProps) {
   const [t, setT] = useState<ZoomTransform>(zoomIdentity);
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
   const raf = useRef(0);
+  /** the marker under the pointer (or tapped once on a touch screen) */
+  const [hoverEvent, setHoverEvent] = useState<string | null>(null);
+  const [armed, setArmed] = useState(false);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -208,6 +217,73 @@ function WorldMapInner(p: MapProps) {
       .slice(0, 90);
   }, [shapes, k, p.showLabels]);
 
+  // ---- Trends: dots on markers, threads between linked stories, and the lens ----
+  const onMap = useMemo(() => {
+    const m = new Map<string, [number, number]>();
+    for (const e of p.events) {
+      const xy = projection([e.location.lng, e.location.lat]);
+      if (xy) m.set(e.id, xy);
+    }
+    return m;
+  }, [p.events, projection]);
+  const eventMap = useMemo(() => new Map(p.events.map((e) => [e.id, e])), [p.events]);
+  const active = useMemo(() => p.trends.filter((t) => t.status === "active" && visibleLinks(t, onMap).length >= 2), [p.trends, onMap]);
+  const trendDots = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const t of active) for (const l of visibleLinks(t, onMap)) m.set(l.eventId, [...(m.get(l.eventId) ?? []), t.color]);
+    return m;
+  }, [active, onMap]);
+  const lens = active.find((t) => t.id === p.lensTrendId) ?? null;
+  const { threads, highlight } = useMemo(() => {
+    const ids = (ts: PublicTrend[]) => new Set(ts.flatMap((t) => visibleLinks(t, onMap).map((l) => l.eventId)));
+    const hovered = hoverEvent ? active.filter((t) => visibleLinks(t, onMap).some((l) => l.eventId === hoverEvent) && (!lens || t.id === lens.id)) : [];
+    if (hovered.length) return { threads: hovered.map((trend) => ({ trend, hub: hoverEvent! })) as Thread[], highlight: ids(hovered) };
+    const shown = lens ? [lens] : p.trendLinesAlways ? active : [];
+    return {
+      threads: shown.map((trend) => ({ trend, hub: leadStory(trend, onMap) })).filter((x): x is Thread => !!x.hub),
+      highlight: lens ? ids([lens]) : null,
+    };
+  }, [hoverEvent, active, lens, p.trendLinesAlways, onMap]);
+  const lensCountries = useMemo(() => new Set(lens ? visibleLinks(lens, onMap).flatMap((l) => eventMap.get(l.eventId)?.countries ?? [l.country]) : []), [lens, onMap, eventMap]);
+
+  // Picking a trend frames its stories, leaving room for the trend card (left on desktop, bottom on phones).
+  useEffect(() => {
+    if (!lens) return;
+    const pts = visibleLinks(lens, onMap).map((l) => onMap.get(l.eventId)!);
+    if (pts.length < 2) return;
+    let x0 = Math.min(...pts.map((q) => q[0])) - 40;
+    let x1 = Math.max(...pts.map((q) => q[0])) + 40;
+    const y0 = Math.min(...pts.map((q) => q[1])) - 40;
+    let y1 = Math.max(...pts.map((q) => q[1])) + 40;
+    if (size.w < 640) y1 += (y1 - y0) * 1.1;
+    else x0 -= Math.max(120, (x1 - x0) * 0.4);
+    x1 += 10;
+    zoomToBounds([[x0, y0], [x1, y1]], 4);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lens?.id]);
+
+  const handleEvent = useCallback(
+    (id: string, pointerType: string) => {
+      // On touch screens the first tap on a trend story shows its threads; the second opens it.
+      if (pointerType === "touch" && trendDots.has(id) && hoverEvent !== id) {
+        setHoverEvent(id);
+        setArmed(true);
+        return;
+      }
+      setArmed(false);
+      setHoverEvent(null);
+      p.onEvent(id);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trendDots, hoverEvent, p.onEvent],
+  );
+  const handleHover = useCallback((id: string | null) => {
+    setArmed(false);
+    setHoverEvent((h) => (id ? id : h && armedRef.current ? h : null));
+  }, []);
+  const armedRef = useRef(false);
+  armedRef.current = armed;
+
   const eventCountries = useMemo(() => new Set(p.events.flatMap((e) => e.countries.slice(0, 1))), [p.events]);
   const hovered = hover ? COUNTRY_BY_ID.get(hover.id) : null;
 
@@ -258,7 +334,11 @@ function WorldMapInner(p: MapProps) {
                       fill={sel ? "#f7c552" : hov ? "#a9db8d" : c.fill}
                       onPointerMove={(e) => setHover({ id: c.id, x: e.clientX, y: e.clientY })}
                       onPointerLeave={() => setHover((h) => (h?.id === c.id ? null : h))}
-                      onClick={() => p.onCountry(c.id)}
+                      onClick={() => {
+                        setHoverEvent(null);
+                        setArmed(false);
+                        p.onCountry(c.id);
+                      }}
                     />
                   );
                 })}
@@ -270,6 +350,16 @@ function WorldMapInner(p: MapProps) {
                 .map((c) => (
                   <path key={`d-${c.id}`} d={c.d} fill="url(#hatch)" stroke="#3b5a2f" strokeOpacity={0.6} strokeDasharray="3 2" strokeWidth={0.8} vectorEffect="non-scaling-stroke" pointerEvents="none" />
                 ))}
+              {lens && (
+                <g pointerEvents="none">
+                  <path d={shapes.land} fill="#0b1d33" opacity={0.3} />
+                  {shapes.countries
+                    .filter((c) => lensCountries.has(c.id))
+                    .map((c) => (
+                      <path key={`t-${c.id}`} d={c.d} fill={lens.color} fillOpacity={0.55} stroke="#fff" strokeOpacity={0.9} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+                    ))}
+                </g>
+              )}
               <path d={shapes.borders} fill="none" stroke="#3f7334" strokeOpacity={0.55} strokeWidth={0.7} vectorEffect="non-scaling-stroke" pointerEvents="none" />
               <path d={shapes.land} fill="none" stroke="#2f5f28" strokeOpacity={0.6} strokeWidth={0.9} vectorEffect="non-scaling-stroke" pointerEvents="none" />
               {p.selectedCountry && (
@@ -296,12 +386,17 @@ function WorldMapInner(p: MapProps) {
                   {c.name}
                 </text>
               ))}
+              {threads.length > 0 && <TrendLines threads={threads} pos={onMap} events={eventMap} k={k} />}
             </>
           )}
         </g>
       </svg>
 
-      <MarkerLayer ref={markerLayerRef} liveTransform={liveT} events={p.events} completed={p.completed} projection={projection} transform={t} onEvent={p.onEvent} zoomToBounds={zoomToBounds} size={size} />
+      <MarkerLayer ref={markerLayerRef} liveTransform={liveT} events={p.events} completed={p.completed} projection={projection} transform={t} onEvent={handleEvent} zoomToBounds={zoomToBounds} size={size} trendDots={trendDots} highlight={highlight} onHover={handleHover} />
+
+      {armed && hoverEvent && (
+        <div className="pointer-events-none absolute bottom-40 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-navy-950/85 px-4 py-1.5 text-xs font-semibold text-white shadow-game sm:bottom-8">Tap the marker again to open its briefing</div>
+      )}
 
       {hovered && hover && (
         <div className="pointer-events-none fixed z-30 rounded-xl bg-navy-900/90 px-3 py-1.5 text-sm font-semibold text-white shadow-game" style={{ left: hover.x + 14, top: hover.y + 14 }}>
