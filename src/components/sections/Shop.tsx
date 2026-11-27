@@ -13,11 +13,12 @@ import { Coin } from "../ui/icons";
 const TABS: { id: string; label: string; slots: Slot[] }[] = [
   { id: "style", label: "Style", slots: ["outfit", "headwear", "accessory"] },
   { id: "office", label: "Office", slots: ["background", "desk", "wallmap", "monitor", "bookshelf", "flag", "globe"] },
+  { id: "building", label: "Building", slots: ["room"] },
   { id: "display", label: "Collectibles", slots: ["display"] },
 ];
 
 export function ShopSection() {
-  const { player, backend, run, toast } = useGame();
+  const { player, backend, run, toast, go } = useGame();
   const [tab, setTab] = useState("style");
   const [busy, setBusy] = useState<string | null>(null);
   const rank = levelFromXp(player.xp).rankIndex;
@@ -29,7 +30,7 @@ export function ShopSection() {
     const r = await run(backend.buy(it.id));
     if (r) {
       sound.play("purchase");
-      toast({ kind: "coins", title: `Purchased ${it.name}`, body: it.slot === "display" ? "Put it on your display shelf in Headquarters." : "Equip it from Headquarters.", icon: "🛍️" });
+      toast({ kind: "coins", title: `Purchased ${it.name}`, body: it.slot === "display" ? "Put it on your display shelf in Headquarters." : it.slot === "room" ? "A new floor is open in your Headquarters." : "Equip it from Headquarters.", icon: "🛍️" });
     }
     setBusy(null);
   };
@@ -49,7 +50,7 @@ export function ShopSection() {
         </span>
       }
     >
-      <div className="mb-4 grid max-w-md grid-cols-3 gap-1 rounded-2xl bg-parchment-200 p-1" role="tablist">
+      <div className="mb-4 grid max-w-xl grid-cols-2 sm:grid-cols-4 gap-1 rounded-2xl bg-parchment-200 p-1" role="tablist">
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={`rounded-xl py-1.5 text-sm font-semibold ${tab === t.id ? "bg-white shadow" : "text-navy-700"}`}>
             {t.label}
@@ -82,7 +83,11 @@ export function ShopSection() {
                     <div className="flex flex-1 flex-col gap-1 border-t border-parchment-200 p-3">
                       <h3 className="font-display font-bold leading-tight text-navy-900">{it.name}</h3>
                       <p className="flex-1 text-xs text-navy-700/80">{it.description}</p>
-                      {owned ? (
+                      {owned && it.slot === "room" ? (
+                        <button className="btn btn-blue mt-1 !py-1.5 text-sm" onClick={() => go("hq")}>
+                          Go to the floor
+                        </button>
+                      ) : owned ? (
                         equipped ? (
                           <span className="btn btn-ghost mt-1 !py-1.5 text-sm">✓ {it.slot === "display" ? "On shelf" : "Equipped"}</span>
                         ) : (

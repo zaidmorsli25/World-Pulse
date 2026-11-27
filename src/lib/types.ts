@@ -139,7 +139,8 @@ export type Slot =
   | "bookshelf"
   | "flag"
   | "globe"
-  | "display";
+  | "display"
+  | "room";
 
 export const RARITIES = ["common", "uncommon", "rare", "epic", "legendary"] as const;
 export type Rarity = (typeof RARITIES)[number];
@@ -158,6 +159,18 @@ export interface AvatarConfig {
   facialHair?: number;
   glasses?: number;
   details?: number;
+}
+
+/** A trend the player follows: its book on the HQ library shelf. */
+export interface TrendBook {
+  followedAt: string;
+  following: boolean;
+  /** XP for following is paid once per trend */
+  followRewarded?: boolean;
+  /** connect-the-dots quiz, paid on the first completion */
+  quiz?: { correct: number; total: number; at: string; coins: number; xp: number };
+  /** "what happens next" answers, by prediction id */
+  predictions?: Record<string, { choice: number; at: string; claimedAt?: string; correct?: boolean }>;
 }
 
 export interface QuizRecord {
@@ -209,11 +222,13 @@ export interface PlayerState {
   stats: { quizzesCompleted: number; perfectQuizzes: number; correctAnswers: number; questionsAnswered: number };
   /** The quiz in progress. The first answer to each question is locked in server-side. */
   pendingQuiz?: { quizId: string; answers: (number | null)[] } | null;
+  /** followed trends and their books in the HQ library */
+  trendBooks?: Record<string, TrendBook>;
   createdAt: string;
   version: number;
 }
 
-export type LedgerKind = "quiz" | "explore" | "purchase" | "mission" | "achievement" | "streak" | "signup";
+export type LedgerKind = "quiz" | "explore" | "purchase" | "mission" | "achievement" | "streak" | "signup" | "trend";
 
 export interface LedgerEntry {
   id: string;

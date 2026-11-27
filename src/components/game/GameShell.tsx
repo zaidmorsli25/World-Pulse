@@ -8,6 +8,7 @@ import { FigureModal } from "../figures/FigureModal";
 import { CountryPanel } from "../map/CountryPanel";
 import { MapToolbar } from "../map/MapToolbar";
 import { WorldMap } from "../map/WorldMap";
+import { TrendBookModal } from "../trends/TrendBook";
 import { BigPictureModal, TrendCard } from "../trends/TrendPanels";
 import { AchievementsSection } from "../sections/Achievements";
 import { DailyBriefingSection } from "../sections/DailyBriefing";
@@ -178,6 +179,7 @@ export function GameShell() {
       {section === "map" && <CountryPanel />}
       {section === "map" && <TrendCard />}
       <BigPictureModal />
+      <TrendBookModal />
       <BriefingModal />
       <FigureModal />
       <Toasts />

@@ -1,91 +1,140 @@
 "use client";
+// The HQ is a building: one floor per room. Office and Library are free; the rest are bought with coins.
 import { useState } from "react";
-import { CATALOG, MAX_DISPLAY, RARITY_STYLE, SLOT_LABEL } from "@/lib/game/catalog";
-import type { Slot } from "@/lib/types";
-import { useGame } from "../game/GameProvider";
-import { HQScene, ItemThumb } from "../hq/HQScene";
-import { SectionPanel } from "../ui/bits";
+import { AnimatePresence, motion } from "framer-motion";
+import { CATALOG_BY_ID } from "@/lib/game/catalog";
+import { RANKS } from "@/lib/config";
+import { levelFromXp } from "@/lib/game/progression";
 import { sound } from "@/lib/client/sound";
+import { useGame } from "../game/GameProvider";
+import { Building, FLOOR_ORDER, RoomDiorama, type FloorState, type RoomId } from "../hq/Building";
+import { BriefingRoom, LibraryRoom, OfficeRoom, ROOM_INFO, RooftopRoom, SituationRoom } from "../hq/Rooms";
+import { SectionPanel } from "../ui/bits";
+import { Coin } from "../ui/icons";
 
-const SLOTS: Slot[] = ["background", "desk", "wallmap", "monitor", "bookshelf", "flag", "globe", "display", "outfit", "headwear", "accessory"];
-const OPTIONAL: Slot[] = ["headwear", "accessory", "wallmap", "monitor", "bookshelf", "flag", "globe"];
+const ROOM_VIEW: Record<RoomId, () => React.ReactElement> = {
+  office: OfficeRoom,
+  library: LibraryRoom,
+  briefing: BriefingRoom,
+  situation: SituationRoom,
+  rooftop: RooftopRoom,
+};
 
 export function HeadquartersSection() {
-  const { player, backend, run, go } = useGame();
-  const [slot, setSlot] = useState<Slot>("background");
+  const { player, backend, run, go, trends, toast } = useGame();
+  const [room, setRoom] = useState<RoomId | null>(null);
+  const [hover, setHover] = useState<RoomId | null>(null);
   const [busy, setBusy] = useState(false);
-  const owned = CATALOG.filter((i) => i.slot === slot && player.inventory.includes(i.id));
-  const shelf = player.equipped.display ?? [];
-  const current = slot === "display" ? null : (player.equipped as Record<string, string | undefined>)[slot];
+  const rank = levelFromXp(player.xp).rankIndex;
+  const books = trends.filter((t) => player.trendBooks?.[t.id]?.following).map((t) => t.color);
 
-  const equip = async (id: string | null) => {
-    if (busy) return;
-    setBusy(true);
-    const r = await run(backend.equip(slot, id));
-    if (r) sound.play("click");
-    setBusy(false);
+  const state = (r: RoomId) => {
+    const id = ROOM_INFO[r].item;
+    const item = id ? CATALOG_BY_ID.get(id) : undefined;
+    const locked = !!item && !player.inventory.includes(item.id);
+    const rankLocked = !!item && rank < item.minRank;
+    return { item, locked, rankLocked };
   };
+  const floors: FloorState[] = FLOOR_ORDER.map((r) => {
+    const { item, locked, rankLocked } = state(r);
+    return { room: r, name: ROOM_INFO[r].name, locked, lockLabel: locked && item ? (rankLocked ? `Rank: ${RANKS[item.minRank].name}` : `${item.price} coins`) : undefined };
+  });
+
+  const unlock = async (r: RoomId) => {
+    const { item } = state(r);
+    if (!item || busy) return;
+    setBusy(true);
+    const res = await run(backend.buy(item.id));
+    setBusy(false);
+    if (res) {
+      sound.play("purchase");
+      toast({ kind: "coins", title: `${ROOM_INFO[r].name} unlocked`, body: "Step inside to try it." });
+      setRoom(r);
+    }
+  };
+  const enter = (r: RoomId) => {
+    sound.play("open");
+    setRoom(r);
+  };
+
+  if (room && !state(room).locked) {
+    const View = ROOM_VIEW[room];
+    return (
+      <SectionPanel
+        title={ROOM_INFO[room].name}
+        subtitle={ROOM_INFO[room].learn}
+        actions={
+          <button className="btn btn-ghost" onClick={() => setRoom(null)}>
+            ← Back to the building
+          </button>
+        }
+      >
+        {room !== "office" && (
+          <div className="mb-5 hidden h-36 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-b from-ocean-500/15 to-parchment-100 sm:flex">
+          <RoomDiorama room={room} books={books} className="h-full" />
+          </div>
+        )}
+        <View />
+      </SectionPanel>
+    );
+  }
 
   return (
     <SectionPanel
       title="Headquarters"
-      subtitle="Your personal office. Decorate it with items from the shop and rewards from promotions."
+      subtitle="Your building. Every floor teaches you something about the world."
       actions={
         <button className="btn btn-primary" onClick={() => go("shop")}>
           Visit shop
         </button>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <HQScene player={player} />
-        <div>
-          <h2 className="mb-2 font-display text-lg font-bold text-navy-900">Customize</h2>
-          <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Item slot">
-            {SLOTS.map((s) => (
-              <button key={s} role="tab" aria-selected={slot === s} onClick={() => setSlot(s)} className={`rounded-xl px-2.5 py-1 text-sm font-semibold transition ${slot === s ? "bg-navy-800 text-white" : "bg-parchment-100 text-navy-700 hover:bg-parchment-200"}`}>
-                {SLOT_LABEL[s]}
-              </button>
-            ))}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div className="relative rounded-3xl bg-gradient-to-b from-[#bfe0f5] via-[#e6f2f8] to-parchment-100 p-2">
+          <div className="mx-auto aspect-[5/6] w-full max-w-[22rem] sm:max-w-[34rem]">
+            <Building floors={floors} hover={hover} onHover={setHover} onPick={(r) => (state(r).locked ? setHover(r) : enter(r))} books={books} />
           </div>
-          {slot === "display" && (
-            <p className="mb-2 text-sm text-navy-700/80">
-              Display shelf: {shelf.length} of {MAX_DISPLAY} spaces used.
-            </p>
-          )}
-          {owned.length === 0 ? (
-            <div className="rounded-2xl border-2 border-dashed border-parchment-200 p-6 text-center text-sm text-navy-700/80">
-              You don&apos;t own any {SLOT_LABEL[slot].toLowerCase()} yet.{" "}
-              <button className="font-semibold text-ocean-700 hover:underline" onClick={() => go("shop")}>
-                Browse the shop
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {owned.map((it) => {
-                const on = slot === "display" ? shelf.includes(it.id) : current === it.id;
-                return (
-                  <button
-                    key={it.id}
-                    disabled={busy}
-                    onClick={() => equip(slot === "display" ? it.id : on && OPTIONAL.includes(slot) ? null : it.id)}
-                    aria-pressed={on}
-                    className={`relative flex flex-col items-center rounded-2xl border-2 bg-white p-2 text-center transition hover:-translate-y-0.5 ${on ? "border-gold-400 shadow-pop" : "border-parchment-200"}`}
-                    style={{ boxShadow: on ? `0 0 0 3px ${RARITY_STYLE[it.rarity].glow}` : undefined }}
-                  >
-                    <ItemThumb item={it} size={72} avatar={player.avatar} />
-                    <span className="mt-1 text-xs font-semibold leading-tight text-navy-900">{it.name}</span>
-                    {on && <span className="absolute right-1.5 top-1.5 rounded-full bg-gold-400 px-1.5 text-[10px] font-bold text-navy-900">{slot === "display" ? "ON SHELF" : "IN USE"}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {current && OPTIONAL.includes(slot) && (
-            <button className="mt-3 text-sm font-semibold text-ocean-700 hover:underline" disabled={busy} onClick={() => equip(null)}>
-              Remove {SLOT_LABEL[slot].toLowerCase()} from HQ
-            </button>
-          )}
+          <p className="pb-1 text-center text-xs font-semibold text-navy-700/70">Tap a floor to go inside</p>
         </div>
+        <ul className="grid content-start gap-2.5">
+          {[...FLOOR_ORDER].reverse().map((r) => {
+            const { item, locked, rankLocked } = state(r);
+            const short = !!item && player.coins < item.price;
+            return (
+              <li key={r}>
+                <motion.div layout onPointerEnter={() => setHover(r)} onPointerLeave={() => setHover(null)} className={`flex items-center gap-3 rounded-2xl border-2 bg-white p-2.5 transition ${hover === r ? "border-gold-400 shadow-pop" : "border-parchment-200"}`}>
+                  <div className={`h-14 w-16 shrink-0 ${locked ? "opacity-60 grayscale" : ""}`}>
+                    <RoomDiorama room={r} books={books} className="h-full w-full" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-navy-900">{ROOM_INFO[r].name}</div>
+                    <p className="line-clamp-2 text-xs text-navy-700/80">{ROOM_INFO[r].learn}</p>
+                  </div>
+                  {!locked ? (
+                    <button className="btn btn-blue shrink-0 !px-3 !py-1.5 text-sm" onClick={() => enter(r)}>
+                      Enter
+                    </button>
+                  ) : rankLocked ? (
+                    <span className="chip shrink-0 bg-parchment-100 text-navy-700">🔒 {RANKS[item!.minRank].name}</span>
+                  ) : (
+                    <button className="btn btn-primary shrink-0 !px-3 !py-1.5 text-sm" disabled={busy || short} onClick={() => unlock(r)} title={short ? `You need ${item!.price - player.coins} more coins` : undefined}>
+                      <span className="inline-flex items-center gap-1">
+                        Unlock <Coin size={16} /> {item!.price}
+                      </span>
+                    </button>
+                  )}
+                </motion.div>
+              </li>
+            );
+          })}
+          <AnimatePresence>
+            {hover && state(hover).locked && (
+              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-xs text-navy-700/70">
+                {state(hover).rankLocked ? "Earn XP from quizzes and briefings to reach the rank this floor needs." : "Earn coins from quizzes to unlock this floor."}
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </ul>
       </div>
     </SectionPanel>
   );

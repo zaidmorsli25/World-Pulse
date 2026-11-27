@@ -58,6 +58,9 @@ interface Ctx {
   /** the trend whose big-picture briefing is open */
   bigPictureId: string | null;
   openBigPicture: (id: string | null) => void;
+  /** the trend book open from the HQ library */
+  bookId: string | null;
+  openBook: (id: string | null) => void;
   logout: () => Promise<void>;
   reloadNews: () => void;
 }
@@ -87,6 +90,7 @@ export function GameProvider({ backend, initial, onLogout, children }: { backend
   const [focusCountry, setFocusCountry] = useState<{ id: string; nonce: number } | null>(null);
   const [lensTrendId, setLensTrendId] = useState<string | null>(null);
   const [bigPictureId, setBigPictureId] = useState<string | null>(null);
+  const [bookId, setBookId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const toastId = useRef(0);
@@ -229,6 +233,11 @@ export function GameProvider({ backend, initial, onLogout, children }: { backend
     openBigPicture: (id) => {
       if (id) sound.play("open");
       setBigPictureId(id);
+    },
+    bookId,
+    openBook: (id) => {
+      if (id) sound.play("open");
+      setBookId(id);
     },
     logout: async () => {
       await backend.logout().catch(() => {});

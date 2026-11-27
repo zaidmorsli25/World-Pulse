@@ -15,6 +15,7 @@ export function buildDemoTrends(events: NewsEvent[], now: Date): Trend[] {
   const byId = new Map(events.map((e) => [e.id, e]));
   const at = now.toISOString();
   const day = (d: number) => new Date(now.getTime() - d * 86400_000).toISOString().slice(0, 10);
+  const ahead = (d: number) => new Date(now.getTime() + d * 86400_000).toISOString().slice(0, 10);
   const mk = (t: Omit<Trend, "links" | "createdAt" | "lastStoryAt" | "status" | "isDemo">, links: (TrendLink | null)[]): Trend => ({
     ...t,
     status: "active",
@@ -40,6 +41,26 @@ export function buildDemoTrends(events: NewsEvent[], now: Date): Trend[] {
           { date: day(4), text: "Panama Canal authority approves the next phase of a reservoir to protect water supply." },
           { date: day(3), text: "Arctic states agree to share rescue ships as sea traffic grows." },
           { date: day(1), text: "Container ship runs aground in the Strait of Malacca." },
+        ],
+        predictions: [
+          {
+            id: "demo-p1",
+            question: "Will the grounded ship in the Strait of Malacca be refloated within a week?",
+            options: ["Yes, within a week", "No, it will take longer"],
+            closesAt: day(2),
+            createdAt: at,
+            answer: 0,
+            explanation: "In this demo scenario, tugs refloated the ship after 3 days and traffic returned to normal.",
+            resolvedAt: at,
+            source: { publication: "Demo", headline: "Demo scenario", url: null },
+          },
+          {
+            id: "demo-p2",
+            question: "Will the Panama Canal raise its daily ship limit before the end of next month?",
+            options: ["Yes, it will raise the limit", "No, the limit will stay the same", "It will lower the limit"],
+            closesAt: ahead(20),
+            createdAt: at,
+          },
         ],
       },
       [

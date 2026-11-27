@@ -70,6 +70,18 @@ export interface Backend {
   claimMission(missionId: string): Promise<PlayerUpdate>;
   updateAvatar(avatar: AvatarConfig): Promise<PlayerUpdate>;
   ledger(): Promise<LedgerRow[]>;
+  followTrend(trendId: string, follow: boolean): Promise<PlayerUpdate>;
+  trendQuiz(trendId: string, answers: Record<string, string>): Promise<TrendQuizPayload>;
+  predict(trendId: string, predictionId: string, choice: number): Promise<PlayerUpdate>;
+  claimPrediction(trendId: string, predictionId: string): Promise<PlayerUpdate>;
+}
+
+export interface TrendQuizPayload extends PlayerUpdate {
+  correct: number;
+  total: number;
+  coins: number;
+  xp: number;
+  results: { id: string; correct: boolean; answer: string; explanation: string }[];
 }
 
 export class ApiError extends Error {
@@ -130,6 +142,10 @@ export const httpBackend: Backend = {
   completeQuiz: (quizId) => call("/api/quiz/complete", { quizId }),
   buy: (itemId) => call("/api/shop/buy", { itemId }),
   equip: (slot, itemId) => call("/api/shop/equip", { slot, itemId }),
+  followTrend: (trendId, follow) => call("/api/trends/follow", { trendId, follow }),
+  trendQuiz: (trendId, answers) => call("/api/trends/quiz", { trendId, answers }),
+  predict: (trendId, predictionId, choice) => call("/api/trends/predict", { trendId, predictionId, choice }),
+  claimPrediction: (trendId, predictionId) => call("/api/trends/claim", { trendId, predictionId }),
   explore: (countryId) => call("/api/explore", { countryId }),
   viewFigure: (figureId) => call("/api/figures/view", { figureId }),
   claimMission: (missionId) => call("/api/missions/claim", { missionId }),
