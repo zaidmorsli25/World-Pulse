@@ -3,6 +3,7 @@
  * plus ledger entries. The server is the only place these run for real accounts, so coin and
  * XP maths can never be manipulated from the browser.
  */
+import { AVATAR_LIMITS, REQUIRED_AVATAR_KEYS } from "./avatarOptions";
 import { REWARDS, RANKS } from "../config";
 import type {
   AvatarConfig,
@@ -346,15 +347,18 @@ export function claimMission(p: PlayerState, missionId: string, now: Date): Engi
   return settle(p, s, [entry(s.userId, "mission", def.coins, def.xp, missionId, `Mission: ${def.title}`, now)], now);
 }
 
-export const AVATAR_LIMITS = { skin: 6, hair: 6, hairColor: 6, backdrop: 6 };
+export { AVATAR_LIMITS };
 
 export function updateAvatar(p: PlayerState, avatar: AvatarConfig, now: Date): EngineResult {
-  for (const k of Object.keys(AVATAR_LIMITS) as (keyof AvatarConfig)[]) {
+  const next: Record<string, number> = {};
+  for (const k of Object.keys(AVATAR_LIMITS) as (keyof typeof AVATAR_LIMITS)[]) {
     const v = avatar[k];
-    if (!Number.isInteger(v) || v < 0 || v >= AVATAR_LIMITS[k]) throw new GameError("bad_avatar", "Invalid avatar option.");
+    if (v === undefined && !(REQUIRED_AVATAR_KEYS as readonly string[]).includes(k)) continue;
+    if (!Number.isInteger(v) || v! < 0 || v! >= AVATAR_LIMITS[k]) throw new GameError("bad_avatar", "Invalid avatar option.");
+    next[k] = v!;
   }
   const s = clone(p);
-  s.avatar = { skin: avatar.skin, hair: avatar.hair, hairColor: avatar.hairColor, backdrop: avatar.backdrop };
+  s.avatar = next as unknown as AvatarConfig;
   return settle(p, s, [], now);
 }
 

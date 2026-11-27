@@ -149,6 +149,15 @@ export interface AvatarConfig {
   hair: number; // style index
   hairColor: number;
   backdrop: number;
+  // Added in the avatar redraw (Nov 2026). Missing means the first option.
+  face?: number;
+  eyes?: number;
+  eyeColor?: number;
+  brows?: number;
+  mouth?: number;
+  facialHair?: number;
+  glasses?: number;
+  details?: number;
 }
 
 export interface QuizRecord {

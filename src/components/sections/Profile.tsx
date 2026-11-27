@@ -4,32 +4,17 @@ import type { LedgerRow } from "@/lib/client/backend";
 import { COUNTRY_BY_ID } from "@/lib/client/world";
 import { continentsExplored } from "@/lib/game/achievements";
 import { levelFromXp } from "@/lib/game/progression";
-import type { AvatarConfig } from "@/lib/types";
 import { useGame } from "../game/GameProvider";
-import { AvatarFigure, BACKDROPS, HAIR_COLORS, HAIR_STYLES, SKIN } from "../ui/Avatar";
+import { AvatarStudio } from "../profile/AvatarStudio";
+import { AvatarFigure } from "../ui/Avatar";
 import { fmtDate, fmtDay, SectionPanel, XPBar } from "../ui/bits";
 import { Coin, XpIcon } from "../ui/icons";
 
-function Swatches({ label, colors, value, onPick }: { label: string; colors: string[]; value: number; onPick: (i: number) => void }) {
-  return (
-    <fieldset className="mb-3">
-      <legend className="mb-1 text-xs font-bold uppercase tracking-wider text-navy-700/70">{label}</legend>
-      <div className="flex flex-wrap gap-2">
-        {colors.map((c, i) => (
-          <button key={c} onClick={() => onPick(i)} aria-label={`${label} option ${i + 1}`} aria-pressed={value === i} className={`h-9 w-9 rounded-full ring-offset-2 transition ${value === i ? "ring-4 ring-gold-400" : "ring-2 ring-white hover:scale-110"}`} style={{ background: c }} />
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
 export function ProfileSection() {
-  const { player, me, backend, run, flyToCountry, openCountry, go } = useGame();
+  const { player, me, backend, flyToCountry, openCountry, go } = useGame();
   const info = levelFromXp(player.xp);
-  const [draft, setDraft] = useState<AvatarConfig>(player.avatar);
+  const [studio, setStudio] = useState(false);
   const [ledger, setLedger] = useState<LedgerRow[] | null>(null);
-  const [saving, setSaving] = useState(false);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(player.avatar);
 
   useEffect(() => {
     backend
@@ -37,12 +22,6 @@ export function ProfileSection() {
       .then(setLedger)
       .catch(() => setLedger([]));
   }, [backend, player.version]);
-
-  const save = async () => {
-    setSaving(true);
-    await run(backend.updateAvatar(draft));
-    setSaving(false);
-  };
 
   const stats: [string, string | number][] = [
     ["Quizzes completed", player.stats.quizzesCompleted],
@@ -61,7 +40,7 @@ export function ProfileSection() {
       <div className="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-parchment-200">
           <div className="flex flex-col items-center text-center">
-            <AvatarFigure avatar={draft} equipped={player.equipped} size={150} />
+            <AvatarFigure avatar={player.avatar} equipped={player.equipped} size={150} />
             <h2 className="mt-2 font-display text-2xl font-bold text-navy-900">{player.username}</h2>
             <p className="font-semibold text-ocean-700">
               {info.rank.icon} {info.rank.name} · Level {info.level}
@@ -72,33 +51,13 @@ export function ProfileSection() {
             {info.nextRank && <p className="mt-1 text-xs text-navy-700/70">Next rank: {info.nextRank.name} at level {info.nextRank.level}</p>}
           </div>
           <hr className="my-4 border-parchment-200" />
-          <h3 className="mb-2 font-display font-bold text-navy-900">Customize avatar</h3>
-          <Swatches label="Skin tone" colors={SKIN} value={draft.skin} onPick={(skin) => setDraft({ ...draft, skin })} />
-          <fieldset className="mb-3">
-            <legend className="mb-1 text-xs font-bold uppercase tracking-wider text-navy-700/70">Hair style</legend>
-            <div className="flex flex-wrap gap-1.5">
-              {HAIR_STYLES.map((h, i) => (
-                <button key={h} onClick={() => setDraft({ ...draft, hair: i })} aria-pressed={draft.hair === i} className={`rounded-xl px-2.5 py-1 text-sm font-semibold ${draft.hair === i ? "bg-navy-800 text-white" : "bg-parchment-100 text-navy-700"}`}>
-                  {h}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-          <Swatches label="Hair colour" colors={HAIR_COLORS} value={draft.hairColor} onPick={(hairColor) => setDraft({ ...draft, hairColor })} />
-          <Swatches label="Badge colour" colors={BACKDROPS} value={draft.backdrop} onPick={(backdrop) => setDraft({ ...draft, backdrop })} />
-          <div className="flex gap-2">
-            <button className="btn btn-primary flex-1" disabled={!dirty || saving} onClick={save}>
-              {saving ? "Saving…" : "Save avatar"}
-            </button>
-            {dirty && (
-              <button className="btn btn-ghost" onClick={() => setDraft(player.avatar)}>
-                Undo
-              </button>
-            )}
-          </div>
-          <button className="mt-3 w-full text-sm font-semibold text-ocean-700 hover:underline" onClick={() => go("hq")}>
-            Change outfit and headwear in Headquarters
+          <button className="btn btn-primary w-full" onClick={() => setStudio(true)}>
+            Customize avatar
           </button>
+          <button className="mt-3 w-full text-sm font-semibold text-ocean-700 hover:underline" onClick={() => go("hq")}>
+            Visit your Headquarters
+          </button>
+          <AvatarStudio open={studio} onClose={() => setStudio(false)} />
         </div>
 
         <div className="space-y-6">
