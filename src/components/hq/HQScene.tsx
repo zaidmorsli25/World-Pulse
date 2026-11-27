@@ -6,6 +6,7 @@ import { levelFromXp } from "@/lib/game/progression";
 import type { AvatarConfig, PlayerState } from "@/lib/types";
 import { AvatarFigure } from "../ui/Avatar";
 import { ItemArt, RoomView } from "./ItemArt";
+import { RoomDiorama, type RoomId } from "./Building";
 
 const get = (id: string | undefined): ShopItem | undefined => (id ? CATALOG_BY_ID.get(id) : undefined);
 
@@ -138,6 +139,7 @@ export function ItemThumb({ item, size = 88, avatar }: { item: ShopItem; size?: 
     const equipped = { outfit: item.slot === "outfit" ? item.id : "outfit-casual", [item.slot]: item.id };
     return <AvatarFigure avatar={avatar ?? { skin: 2, hair: 0, hairColor: 1, backdrop: 5 }} equipped={equipped} size={size} />;
   }
+  if (item.slot === "room") return <RoomDiorama room={item.art as RoomId} className="block" style={{ width: size, height: size }} />;
   if (item.slot === "background")
     return (
       <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden className="rounded-xl">

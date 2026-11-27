@@ -56,10 +56,18 @@ export class SupabaseStore implements Store {
   async loadPlayer(userId: string) {
     const { data, error } = await this.db.rpc("wp_load_player", { p_user: userId });
     if (error) throw error;
-    return (data as PlayerState | null) ?? null;
+    const p = (data as PlayerState | null) ?? null;
+    // Trend books ride along inside the stats JSON column (no schema change needed).
+    if (p?.stats && "trendBooks" in p.stats) {
+      const { trendBooks, ...stats } = p.stats as PlayerState["stats"] & { trendBooks?: PlayerState["trendBooks"] };
+      return { ...p, stats, trendBooks };
+    }
+    return p;
   }
   async savePlayer(state: PlayerState, expectedVersion: number, ledger: LedgerEntry[], attempt?: QuizAttempt) {
-    const { data, error } = await this.db.rpc("wp_save_player", { p_state: state, p_expected: expectedVersion, p_ledger: ledger, p_attempt: attempt ?? null });
+    const { trendBooks, ...rest } = state;
+    const row = trendBooks ? { ...rest, stats: { ...rest.stats, trendBooks } } : rest;
+    const { data, error } = await this.db.rpc("wp_save_player", { p_state: row, p_expected: expectedVersion, p_ledger: ledger, p_attempt: attempt ?? null });
     if (error) throw error;
     if (data !== true) throw new ConflictError();
   }

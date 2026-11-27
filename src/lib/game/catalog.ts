@@ -50,6 +50,11 @@ export const CATALOG: ShopItem[] = [
   i({ id: "acc-medal", name: "Service Medal", slot: "accessory", rarity: "rare", price: 550, minRank: 3, description: "Recognition for dedicated study.", art: "medal", color: "#e0b84a", accent: "#3a6ea5" }),
   i({ id: "acc-sash", name: "Diplomatic Sash", slot: "accessory", rarity: "epic", price: 1100, minRank: 5, description: "Worn at state receptions.", art: "sash", color: "#6a2c91", accent: "#ffd76a" }),
 
+  // ---------------------------------------------------------------- HQ building rooms (the Office and Library are free)
+  i({ id: "room-situation", name: "Situation Room", slot: "room", rarity: "rare", price: 300, minRank: 0, description: "Screens that track every story on the map, region by region.", art: "situation", color: "#1a2433" }),
+  i({ id: "room-briefing", name: "Briefing Room", slot: "room", rarity: "epic", price: 450, minRank: 1, description: "Practise telling facts from claims and opinions, the core skill of reading the news.", art: "briefing", color: "#3a4f7a" }),
+  i({ id: "room-rooftop", name: "Rooftop Observatory", slot: "room", rarity: "legendary", price: 700, minRank: 2, description: "A telescope over the world's capitals. How many can you name?", art: "rooftop", color: "#2d86cc" }),
+
   // ---------------------------------------------------------------- HQ backgrounds
   i({ id: "bg-basement", name: "Basement Office", slot: "background", rarity: "common", price: 0, minRank: 0, starter: true, description: "Humble beginnings, with a small window.", art: "basement", color: "#5d6b7a" }),
   i({ id: "bg-city", name: "City Skyline Office", slot: "background", rarity: "uncommon", price: 300, minRank: 0, description: "A view over a glittering capital.", art: "city", color: "#3f5f8a" }),
@@ -127,7 +132,7 @@ export const SLOT_LABEL: Record<Slot, string> = {
   outfit: "Outfits",
   headwear: "Headwear",
   accessory: "Accessories",
-  background: "HQ Rooms",
+  background: "Office Styles",
   desk: "Desks",
   wallmap: "Wall Maps",
   monitor: "Monitors",
@@ -135,4 +140,5 @@ export const SLOT_LABEL: Record<Slot, string> = {
   flag: "Flags",
   globe: "Globes",
   display: "Collectibles",
+  room: "Building Floors",
 };

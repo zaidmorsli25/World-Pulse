@@ -12,7 +12,7 @@ import { Modal } from "../ui/Modal";
 import { EventTrends } from "../trends/TrendPanels";
 import { QuizView } from "./Quiz";
 
-const KIND: Record<ClaimKind, { label: string; cls: string; tip: string }> = {
+export const CLAIM_KIND: Record<ClaimKind, { label: string; cls: string; tip: string }> = {
   fact: { label: "Confirmed", cls: "bg-land-500/15 text-land-600", tip: "Confirmed by the reporting" },
   allegation: { label: "Allegation", cls: "bg-[#f97316]/15 text-[#b45309]", tip: "Claimed by one side; not independently confirmed" },
   disputed: { label: "Disputed", cls: "bg-[#e5484d]/15 text-[#b4262b]", tip: "The parties disagree about this" },
@@ -25,8 +25,8 @@ function Claims({ claims }: { claims: Claim[] }) {
     <ul className="space-y-2.5">
       {claims.map((c, i) => (
         <li key={i} className="flex gap-3 leading-relaxed text-navy-900">
-          <span className={`chip mt-0.5 h-fit shrink-0 ${KIND[c.kind].cls}`} title={KIND[c.kind].tip}>
-            {KIND[c.kind].label}
+          <span className={`chip mt-0.5 h-fit shrink-0 ${CLAIM_KIND[c.kind].cls}`} title={CLAIM_KIND[c.kind].tip}>
+            {CLAIM_KIND[c.kind].label}
           </span>
           <span>{c.text}</span>
         </li>

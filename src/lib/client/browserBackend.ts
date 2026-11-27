@@ -23,6 +23,11 @@ import {
   USERNAME_RE,
   viewFigure,
   type EngineResult,
+  followTrend,
+  submitConnectQuiz,
+  answerPrediction,
+  claimPrediction,
+  type ConnectQuizOutcome,
 } from "@/lib/game/engine";
 import type { LedgerEntry, PlayerState, Quiz } from "@/lib/types";
 import { ApiError, type Backend, type PlayerUpdate } from "./backend";
@@ -121,6 +126,13 @@ const guard = async <T,>(f: () => T | Promise<T>): Promise<T> => {
   }
 };
 
+const demoTrends = () => toPublicTrends(buildDemoTrends(content.events, anchor), content.events);
+const demoTrend = (id: string) => {
+  const t = demoTrends().find((x) => x.id === id);
+  if (!t) throw new ApiError("That trend does not exist.", 404, "not_found");
+  return t;
+};
+
 export const browserBackend: Backend = {
   kind: "browser",
   async me() {
@@ -137,7 +149,7 @@ export const browserBackend: Backend = {
       const n = QUIZZES.get(e.quizId)?.questions.length ?? 0;
       if (n) maxCoins[e.id] = n * REWARDS.coinsPerCorrect + REWARDS.perfectBonusCoins;
     }
-    return { mode: "demo", updatedAt: anchor.toISOString(), events: content.events, maxCoins, trends: toPublicTrends(buildDemoTrends(content.events, anchor), content.events) };
+    return { mode: "demo", updatedAt: anchor.toISOString(), events: content.events, maxCoins, trends: demoTrends() };
   },
   async signup(email, username, password) {
     const db = load();
@@ -206,6 +218,15 @@ export const browserBackend: Backend = {
     }),
   buy: (itemId) => update((p, now) => purchase(p, itemId, now)),
   equip: (slot, itemId) => update((p, now) => equip(p, itemId, slot, now)),
+  followTrend: (trendId, follow) => update((p, now) => followTrend(p, demoTrend(trendId), follow, now)),
+  async trendQuiz(trendId, answers) {
+    let out: ConnectQuizOutcome | null = null;
+    const r = await update((p, now) => (out = submitConnectQuiz(p, demoTrend(trendId), demoTrends(), answers, now)));
+    const o = out as unknown as ConnectQuizOutcome;
+    return { ...r, correct: o.correct, total: o.total, coins: o.coins, xp: o.xp, results: o.results };
+  },
+  predict: (trendId, predictionId, choice) => update((p, now) => answerPrediction(p, demoTrend(trendId), predictionId, choice, now)),
+  claimPrediction: (trendId, predictionId) => update((p, now) => claimPrediction(p, demoTrend(trendId), predictionId, now)),
   explore: (countryId) => update((p, now) => exploreCountry(p, countryId, now)),
   viewFigure: (figureId) => update((p, now) => viewFigure(p, figureId, FIGURE_IDS, now)),
   claimMission: (missionId) => update((p, now) => claimMission(p, missionId, now)),

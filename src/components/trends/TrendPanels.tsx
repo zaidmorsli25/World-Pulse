@@ -6,6 +6,7 @@ import { useGame } from "../game/GameProvider";
 
 import { NavIcon } from "../ui/icons";
 import { Modal } from "../ui/Modal";
+import { FollowButton } from "./TrendBook";
 
 /** "Nov 24, 2026" for a full ISO time or a plain YYYY-MM-DD day (read as a local date, not UTC). */
 export function fmtDay(s: string) {
@@ -103,10 +104,11 @@ export function TrendCard() {
                 })}
               </ul>
             </div>
-            <footer className="shrink-0 border-t border-parchment-200 p-3">
-              <button className="btn btn-primary w-full" onClick={() => openBigPicture(t.id)}>
+            <footer className="flex shrink-0 gap-2 border-t border-parchment-200 p-3">
+              <button className="btn btn-primary flex-1" onClick={() => openBigPicture(t.id)}>
                 See the big picture
               </button>
+              <FollowButton t={t} className="!px-3" />
             </footer>
           </div>
         </motion.aside>
@@ -133,7 +135,7 @@ export function BigPictureModal() {
 }
 
 function BigPicture({ t }: { t: PublicTrend }) {
-  const { openBigPicture, openEvent, setLensTrend, eventsById, go, section } = useGame();
+  const { openBigPicture, openEvent, setLensTrend, eventsById, go, section, player, openBook } = useGame();
   const { read, total } = useTrendProgress(t);
   return (
     <>
@@ -229,6 +231,26 @@ function BigPicture({ t }: { t: PublicTrend }) {
             </ol>
           </section>
         )}
+
+        <div className="mb-6 rounded-2xl bg-parchment-100 p-4 ring-1 ring-parchment-200">
+          <p className="mb-2 text-sm text-navy-800">
+            <b>Follow this trend</b> to put its book on your Headquarters library shelf. Each briefing you read adds a page, and the book has a connect-the-dots quiz and predictions that earn coins and XP.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <FollowButton t={t} />
+            {player.trendBooks?.[t.id]?.following && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  openBigPicture(null);
+                  openBook(t.id);
+                }}
+              >
+                Open the book
+              </button>
+            )}
+          </div>
+        </div>
 
         {t.status === "active" && (
           <button

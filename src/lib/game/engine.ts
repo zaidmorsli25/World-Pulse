@@ -21,6 +21,7 @@ import { CATALOG, CATALOG_BY_ID, MAX_DISPLAY, STARTER_ITEMS } from "./catalog";
 import { MISSIONS_BY_ID, pickMissions } from "./missions";
 import { levelFromXp } from "./progression";
 import countries from "@/data/generated/countries.json";
+import { connectQuiz, type PublicTrend } from "../trends";
 
 const REGION_BY_ID = new Map((countries as { id: string; region: string | null }[]).map((c) => [c.id, c.region]));
 const COUNTRY_IDS = new Set(REGION_BY_ID.keys());
@@ -363,3 +364,126 @@ export function updateAvatar(p: PlayerState, avatar: AvatarConfig, now: Date): E
 }
 
 export const USERNAME_RE = /^[A-Za-z0-9_.-]{3,20}$/;
+
+// ---------------------------------------------------------------- trend books (HQ library)
+
+export const TREND_REWARDS = {
+  followXp: 10,
+  quizCoinsPerCorrect: 8,
+  quizXpPerCorrect: 10,
+  quizPerfectCoins: 15,
+  predictionCoins: 30,
+  predictionXp: 25,
+  /** for taking part in a prediction you got wrong */
+  predictionTryXp: 5,
+  /** each followed trend beyond the first adds 10% to book rewards, up to +50% */
+  followBonusStep: 0.1,
+  followBonusMax: 0.5,
+} as const;
+
+/** Reward multiplier for book rewards: following more trends earns more. */
+export function followBonus(p: PlayerState): number {
+  const n = Object.values(p.trendBooks ?? {}).filter((b) => b.following).length;
+  return 1 + Math.min(TREND_REWARDS.followBonusMax, Math.max(0, n - 1) * TREND_REWARDS.followBonusStep);
+}
+
+/** Pages in a trend's book: one per linked story the player has read (finished its quiz). */
+export function trendPages(p: PlayerState, t: PublicTrend): string[] {
+  return t.links.filter((l) => p.briefingsRead.includes(l.eventId)).map((l) => l.eventId);
+}
+
+/** The connect-the-dots quiz opens once every story of the trend still on the map is read (and at least 2). */
+export function connectQuizOpen(p: PlayerState, t: PublicTrend): boolean {
+  const read = new Set(trendPages(p, t));
+  return read.size >= 2 && t.links.filter((l) => l.live).every((l) => read.has(l.eventId));
+}
+
+export function followTrend(p: PlayerState, t: PublicTrend, follow: boolean, now: Date): EngineResult {
+  const s = clone(p);
+  s.trendBooks = s.trendBooks ?? {};
+  const book = s.trendBooks[t.id];
+  if (!follow) {
+    if (book) book.following = false;
+    return settle(p, s, [], now);
+  }
+  if (t.status !== "active" && !book) throw new GameError("trend_retired", "This trend has ended, so it can't be followed any more.");
+  const ledger: LedgerEntry[] = [];
+  const b = book ?? { followedAt: now.toISOString(), following: true };
+  b.following = true;
+  if (!b.followRewarded) {
+    b.followRewarded = true;
+    s.xp += TREND_REWARDS.followXp;
+    ledger.push(entry(s.userId, "trend", 0, TREND_REWARDS.followXp, t.id, `Followed trend: ${t.name}`, now));
+  }
+  s.trendBooks[t.id] = b;
+  return settle(p, s, ledger, now);
+}
+
+export interface ConnectQuizOutcome extends EngineResult {
+  correct: number;
+  total: number;
+  coins: number;
+  xp: number;
+  results: { id: string; correct: boolean; answer: string; explanation: string }[];
+}
+
+export function submitConnectQuiz(p: PlayerState, t: PublicTrend, all: PublicTrend[], answers: Record<string, string>, now: Date): ConnectQuizOutcome {
+  const book = p.trendBooks?.[t.id];
+  if (!book?.following) throw new GameError("not_following", "Follow this trend to open its book first.");
+  if (!connectQuizOpen(p, t)) throw new GameError("quiz_locked", "Read every story in this trend first.");
+  const qs = connectQuiz(t, all);
+  if (!qs.length) throw new GameError("no_quiz", "This trend doesn't have enough stories for a quiz yet.");
+  const results = qs.map((q) => ({ id: q.id, correct: answers[q.id] === q.answer, answer: q.answer, explanation: q.explanation }));
+  const correct = results.filter((r) => r.correct).length;
+  const total = qs.length;
+  const s = clone(p);
+  const b = s.trendBooks![t.id];
+  let coins = 0;
+  let xp = 0;
+  const ledger: LedgerEntry[] = [];
+  if (!b.quiz) {
+    const bonus = followBonus(p);
+    coins = Math.round((correct * TREND_REWARDS.quizCoinsPerCorrect + (correct === total ? TREND_REWARDS.quizPerfectCoins : 0)) * bonus);
+    xp = Math.round(correct * TREND_REWARDS.quizXpPerCorrect * bonus);
+    s.coins += coins;
+    s.xp += xp;
+    if (coins || xp) ledger.push(entry(s.userId, "trend", coins, xp, t.id, `Connect the dots ${correct}/${total}: ${t.name}`, now));
+    b.quiz = { correct, total, at: now.toISOString(), coins, xp };
+  } else if (correct > b.quiz.correct) {
+    b.quiz = { ...b.quiz, correct, total, at: now.toISOString() };
+  }
+  return { ...settle(p, s, ledger, now), correct, total, coins, xp, results };
+}
+
+export function answerPrediction(p: PlayerState, t: PublicTrend, predictionId: string, choice: number, now: Date): EngineResult {
+  const pr = t.predictions?.find((x) => x.id === predictionId);
+  if (!pr) throw new GameError("unknown_prediction", "That prediction does not exist.", 404);
+  if (!p.trendBooks?.[t.id]?.following) throw new GameError("not_following", "Follow this trend to make predictions.");
+  if (pr.answer !== undefined || dayKey(now) > pr.closesAt) throw new GameError("prediction_closed", "This prediction is closed.");
+  if (!Number.isInteger(choice) || choice < 0 || choice >= pr.options.length) throw new GameError("bad_choice", "Pick one of the options.");
+  const s = clone(p);
+  const b = s.trendBooks![t.id];
+  b.predictions = b.predictions ?? {};
+  if (b.predictions[predictionId]) throw new GameError("already_predicted", "You already made this prediction.");
+  b.predictions[predictionId] = { choice, at: now.toISOString() };
+  return settle(p, s, [], now);
+}
+
+export function claimPrediction(p: PlayerState, t: PublicTrend, predictionId: string, now: Date): EngineResult {
+  const pr = t.predictions?.find((x) => x.id === predictionId);
+  const mine = p.trendBooks?.[t.id]?.predictions?.[predictionId];
+  if (!pr || !mine) throw new GameError("unknown_prediction", "You didn't make this prediction.", 404);
+  if (pr.answer === undefined) throw new GameError("not_resolved", "We don't know what happened yet. Check back later.");
+  if (mine.claimedAt) throw new GameError("claimed", "You already collected this reward.");
+  const s = clone(p);
+  const m = s.trendBooks![t.id].predictions![predictionId];
+  const right = mine.choice === pr.answer;
+  const bonus = followBonus(p);
+  const coins = right ? Math.round(TREND_REWARDS.predictionCoins * bonus) : 0;
+  const xp = right ? Math.round(TREND_REWARDS.predictionXp * bonus) : TREND_REWARDS.predictionTryXp;
+  m.claimedAt = now.toISOString();
+  m.correct = right;
+  s.coins += coins;
+  s.xp += xp;
+  return settle(p, s, [entry(s.userId, "trend", coins, xp, `${t.id}:${predictionId}`, `Prediction ${right ? "right" : "checked"}: ${t.name}`, now)], now);
+}

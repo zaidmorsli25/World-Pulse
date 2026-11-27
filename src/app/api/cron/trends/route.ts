@@ -23,6 +23,15 @@ const Op = z.discriminatedUnion("op", [
   z.object({ op: z.literal("add_links"), id: z.string(), links: z.array(LinkIn).min(1).max(12), timeline: Timeline.default([]) }),
   z.object({ op: z.literal("remove_link"), id: z.string(), eventId: z.string() }),
   z.object({ op: z.literal("update"), id: z.string(), name: z.string().min(4).max(60).optional(), cause: z.string().min(10).max(300).optional(), summary: Summary.optional(), timeline: Timeline.optional() }),
+  z.object({ op: z.literal("add_prediction"), id: z.string(), question: z.string().min(10).max(200), options: z.array(z.string().min(1).max(120)).min(2).max(4), closesAt: Day }),
+  z.object({
+    op: z.literal("resolve_prediction"),
+    id: z.string(),
+    predictionId: z.string(),
+    answer: z.number().int().min(0),
+    explanation: z.string().min(10).max(400),
+    source: z.object({ publication: z.enum(APPROVED_PUBLICATIONS), headline: z.string().min(5).max(300), url: z.string().url().max(1000) }),
+  }),
   z.object({ op: z.literal("approve"), id: z.string() }),
   z.object({ op: z.literal("reject"), id: z.string() }),
   z.object({ op: z.literal("retire"), id: z.string() }),
@@ -103,6 +112,25 @@ export const POST = handler({ limit: 20, body: Body }, async ({ req, body }) => 
           mergeTimeline(t, op.timeline);
         }
         break;
+      case "add_prediction": {
+        t = find(op.id);
+        if (t.status !== "active" && t.status !== "draft") throw new HttpError(409, `${t.id} is retired.`, "retired");
+        if (op.closesAt <= at.slice(0, 10)) throw new HttpError(400, "closesAt must be a future day.", "bad_date");
+        const open = (t.predictions ?? []).filter((x) => x.answer === undefined);
+        if (open.length >= 3) throw new HttpError(409, `${t.id} already has 3 open predictions.`, "too_many");
+        t.predictions = [...(t.predictions ?? []), { id: `p${(t.predictions?.length ?? 0) + 1}-${Date.now().toString(36)}`, question: op.question, options: op.options, closesAt: op.closesAt, createdAt: at }];
+        break;
+      }
+      case "resolve_prediction": {
+        t = find(op.id);
+        const pr = t.predictions?.find((x) => x.id === op.predictionId);
+        if (!pr) throw new HttpError(404, `No prediction ${op.predictionId} on ${t.id}.`, "not_found");
+        if (pr.answer !== undefined) throw new HttpError(409, "Already resolved.", "resolved");
+        if (op.answer >= pr.options.length) throw new HttpError(400, "answer is not one of the options.", "bad_answer");
+        if (!urlBelongsTo(op.source.publication, op.source.url)) throw new HttpError(400, `The source is not a link from ${op.source.publication}.`, "bad_source");
+        Object.assign(pr, { answer: op.answer, explanation: op.explanation, source: op.source, resolvedAt: at });
+        break;
+      }
       case "approve": {
         t = find(op.id);
         if (t.status !== "draft") throw new HttpError(409, `${t.id} is not a draft.`, "not_draft");
