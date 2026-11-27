@@ -5,6 +5,7 @@ import { useGame } from "../game/GameProvider";
 import { fmtDay } from "../ui/bits";
 import { CATEGORY_META, CategoryIcon } from "../ui/icons";
 import { Modal } from "../ui/Modal";
+import { usePortrait } from "@/lib/client/portraits";
 import { FigureBadge } from "./FigureBadge";
 
 function yearsSince(iso: string) {
@@ -17,6 +18,7 @@ function yearsSince(iso: string) {
 export function FigureModal() {
   const { figureId, openFigure, news, openEvent, flyToCountry, openCountry, go } = useGame();
   const f = figureId ? FIGURES_BY_ID.get(figureId) : undefined;
+  const photo = usePortrait(f?.id);
   const country = f?.country ? COUNTRY_BY_ID.get(f.country) : undefined;
   const related = f ? (news?.events ?? []).filter((e) => e.figures.includes(f.id) || e.briefing.involved.some((i) => i.ref === f.id)) : [];
   return (
@@ -46,9 +48,15 @@ export function FigureModal() {
                 <dd className="mt-0.5 font-semibold text-navy-900">{f.affiliation ?? "Non-partisan / not applicable"}</dd>
               </div>
               <div className="rounded-2xl bg-parchment-100 p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-navy-700/70">Time in office</dt>
+                <dt className="text-xs font-bold uppercase tracking-wider text-navy-700/70">Time in role</dt>
                 <dd className="mt-0.5 font-semibold text-navy-900">
-                  {yearsSince(f.inOfficeSince)} <span className="font-normal text-navy-700/80">(since {fmtDay(f.inOfficeSince)})</span>
+                  {f.approxSince ? (
+                    <>since {f.inOfficeSince.slice(0, 4)}</>
+                  ) : (
+                    <>
+                      {yearsSince(f.inOfficeSince)} <span className="font-normal text-navy-700/80">(since {fmtDay(f.inOfficeSince)})</span>
+                    </>
+                  )}
                 </dd>
               </div>
             </dl>
@@ -95,7 +103,19 @@ export function FigureModal() {
               </section>
             )}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-parchment-200 pt-4">
-              <p className="text-xs text-navy-700/70">Office details verified as of {fmtDay(f.verifiedAsOf)}. Reference information, not news.</p>
+              <p className="text-xs text-navy-700/70">
+                Office details verified as of {fmtDay(f.verifiedAsOf)}.
+                {photo && (
+                  <>
+                    {" "}
+                    Photo:{" "}
+                    <a href={photo.source} target="_blank" rel="noreferrer" className="underline">
+                      {photo.credit}
+                    </a>
+                    , {photo.license}, via Wikimedia Commons.
+                  </>
+                )}
+              </p>
               {country && (
                 <button
                   className="btn btn-blue !py-2 text-sm"

@@ -13,6 +13,7 @@ const GROUPS: { id: string; label: string; roles: FigureRole[] }[] = [
   { id: "ministers", label: "Ministers & deputies", roles: ["foreign_minister", "minister", "deputy"] },
   { id: "opposition", label: "Opposition & party leaders", roles: ["opposition", "party_leader"] },
   { id: "orgs", label: "International organizations", roles: ["org_leader"] },
+  { id: "business", label: "Business & technology", roles: ["business_leader"] },
 ];
 
 export function FiguresSection() {
@@ -26,7 +27,7 @@ export function FiguresSection() {
   }, [q, group]);
 
   return (
-    <SectionPanel title="Political Figures" subtitle={`${FIGURES.length} leaders and officials · offices verified as of ${fmtDay(VERIFIED_AS_OF)} · ${player.figuresViewed.length} profiles opened`}>
+    <SectionPanel title="Political Figures" subtitle={`${FIGURES.length} leaders, officials and business figures · verified as of ${fmtDay(VERIFIED_AS_OF)} · ${player.figuresViewed.length} profiles opened`}>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <input className="input sm:max-w-xs" placeholder="Search by name, country or office…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search political figures" />
         <div className="scroll-thin flex gap-1.5 overflow-x-auto pb-1">

@@ -25,7 +25,10 @@ export function CountryPanel() {
   const c = countryId ? COUNTRY_BY_ID.get(countryId) : undefined;
   const profile = c ? COUNTRY_PROFILES[c.id] : undefined;
   const events = c ? (news?.events ?? []).filter((e) => e.countries.includes(c.id)).sort((a, b) => b.importance.score - a.importance.score) : [];
-  const leaders = profile ? [...new Set([profile.headOfState, profile.headOfGovernment, ...(profile.otherFigures ?? [])].filter(Boolean) as string[])] : c ? FIGURES.filter((f) => f.country === c.id).map((f) => f.id) : [];
+  // Head of state and government first, then everyone else from this country in the directory.
+  const leaders = c
+    ? [...new Set([profile?.headOfState, profile?.headOfGovernment, ...(profile?.otherFigures ?? []), ...FIGURES.filter((f) => f.country === c.id).map((f) => f.id)].filter(Boolean) as string[])]
+    : [];
 
   return (
     <AnimatePresence>
