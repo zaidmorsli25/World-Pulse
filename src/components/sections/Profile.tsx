@@ -8,7 +8,7 @@ import type { AvatarConfig } from "@/lib/types";
 import { useGame } from "../game/GameProvider";
 import { AvatarFigure, BACKDROPS, HAIR_COLORS, HAIR_STYLES, SKIN } from "../ui/Avatar";
 import { fmtDate, fmtDay, SectionPanel, XPBar } from "../ui/bits";
-import { Coin } from "../ui/icons";
+import { Coin, XpIcon } from "../ui/icons";
 
 function Swatches({ label, colors, value, onPick }: { label: string; colors: string[]; value: number; onPick: (i: number) => void }) {
   return (
@@ -162,7 +162,11 @@ export function ProfileSection() {
                           {r.coins}
                         </span>
                       )}
-                      {r.xp > 0 && <span className="block text-ocean-700">+{r.xp} XP</span>}
+                      {r.xp > 0 && (
+                        <span className="flex items-center justify-end gap-1 text-ocean-700">
+                          <XpIcon size={12} /> +{r.xp} XP
+                        </span>
+                      )}
                     </span>
                   </li>
                 ))}

@@ -53,6 +53,10 @@ export interface Backend {
   logout(): Promise<void>;
   forgot(email: string): Promise<{ message: string; devLink?: string }>;
   reset(p: { token?: string; accessToken?: string }, password: string): Promise<void>;
+  /** Log in with the token from the confirmation email link. */
+  confirmEmail(accessToken: string): Promise<void>;
+  /** Has the account this browser just created confirmed its email yet? Logs in when it has. */
+  pendingSignup(): Promise<"none" | "waiting" | "confirmed">;
   startQuiz(quizId: string): Promise<{ quiz: PublicQuiz; resumed: (number | null)[] | null; player: PlayerState; replay: boolean }>;
   answer(quizId: string, index: number, choice: number): Promise<AnswerPayload>;
   completeQuiz(quizId: string): Promise<CompletePayload>;
@@ -114,6 +118,10 @@ export const httpBackend: Backend = {
   reset: async (p, password) => {
     await call("/api/auth/reset", { ...p, password });
   },
+  confirmEmail: async (accessToken) => {
+    await call("/api/auth/confirm", { accessToken });
+  },
+  pendingSignup: async () => (await call<{ status: "none" | "waiting" | "confirmed" }>("/api/auth/pending", {})).status,
   startQuiz: (quizId) => call("/api/quiz/start", { quizId }),
   answer: (quizId, index, choice) => call("/api/quiz/answer", { quizId, index, choice }),
   completeQuiz: (quizId) => call("/api/quiz/complete", { quizId }),

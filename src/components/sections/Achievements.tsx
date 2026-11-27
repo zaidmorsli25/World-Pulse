@@ -5,7 +5,7 @@ import { CATALOG } from "@/lib/game/catalog";
 import { levelFromXp } from "@/lib/game/progression";
 import { useGame } from "../game/GameProvider";
 import { fmtDay, SectionPanel } from "../ui/bits";
-import { Coin } from "../ui/icons";
+import { Coin, XpIcon } from "../ui/icons";
 
 export function AchievementsSection() {
   const { player } = useGame();
@@ -54,7 +54,7 @@ export function AchievementsSection() {
                         {prog} / {a.target}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Coin size={12} /> {a.coins} · {a.xp} XP
+                        <Coin size={12} /> {a.coins} · <XpIcon size={12} /> {a.xp} XP
                       </span>
                     </p>
                   </div>

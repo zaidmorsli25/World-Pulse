@@ -173,6 +173,12 @@ export const browserBackend: Backend = {
   async reset() {
     throw new ApiError("Password reset is not available in the offline demo.", 400, "unsupported");
   },
+  async confirmEmail() {
+    throw new ApiError("Email confirmation is not used in the offline demo.", 400, "unsupported");
+  },
+  async pendingSignup() {
+    return "none" as const;
+  },
   startQuiz: (quizId) =>
     guard(() => {
       const quiz = quizOf(quizId);

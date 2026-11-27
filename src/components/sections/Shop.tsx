@@ -42,7 +42,7 @@ export function ShopSection() {
   return (
     <SectionPanel
       title="Shop"
-      subtitle="Spend coins earned from briefings. Everything is cosmetic: no loot boxes, no real money."
+      subtitle="Spend coins earned from briefings on outfits, office upgrades and collectibles."
       actions={
         <span className="hud-pill !text-base">
           <CoinAmount value={player.coins} />

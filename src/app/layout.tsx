@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   icons: { icon: "/favicon.svg" },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0d1a2e" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, maximumScale: 1, userScalable: false, themeColor: "#0d1a2e" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

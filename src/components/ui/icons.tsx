@@ -225,6 +225,19 @@ export const NavIcon = {
       <path d="M11 14v-3a5 5 0 0110 0v3" />
     </S>
   ),
+  eye: (p: P) => (
+    <S {...p}>
+      <path d="M3 16s5-9 13-9 13 9 13 9-5 9-13 9S3 16 3 16z" />
+      <circle cx="16" cy="16" r="4" />
+    </S>
+  ),
+  eyeOff: (p: P) => (
+    <S {...p}>
+      <path d="M13 7.4A13 13 0 0116 7c8 0 13 9 13 9a22 22 0 01-3.4 4.4M8.6 9.6C5 12 3 16 3 16s5 9 13 9c2.4 0 4.5-.8 6.3-2" />
+      <path d="M13.2 13.2a4 4 0 005.6 5.6" />
+      <path d="M4 4l24 24" />
+    </S>
+  ),
   flame: (p: P) => (
     <S {...p}>
       <path d="M16 28c5 0 8-3.5 8-8 0-6-6-8-5-15-4 2-7 6-7 10-1.5-1-2-3-2-4-2 2-2 5.5-2 9 0 4.5 3 8 8 8z" fill="currentColor" stroke="none" />
@@ -240,6 +253,18 @@ export function Coin({ size = 20 }: { size?: number }) {
       <circle cx="16" cy="15" r="9.5" fill="none" stroke="#d99a22" strokeWidth="2" />
       <path d="M12 15.5l3 3 5.5-6.5" fill="none" stroke="#b9801a" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
       <ellipse cx="11" cy="9" rx="3" ry="1.6" fill="#fff" opacity=".55" />
+    </svg>
+  );
+}
+
+/** XP badge: a gold-rimmed blue star gem with "XP" on it, the partner of the coin icon. */
+export function XpIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
+      <path d="M16 3.2l3.6 5.2 6.1 1.2-1.5 6.1 2.6 5.7-5.9 2-2.9 5.6L16 26.4 13 29l-2.9-5.6-5.9-2 2.6-5.7-1.5-6.1 6.1-1.2z" fill="#1a4f86" transform="translate(0 1.4)" />
+      <path d="M16 3.2l3.6 5.2 6.1 1.2-1.5 6.1 2.6 5.7-5.9 2-2.9 5.6L16 26.4 13 29l-2.9-5.6-5.9-2 2.6-5.7-1.5-6.1 6.1-1.2z" fill="#4da3e0" stroke="#f7c552" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M16 6.6l2.6 3.8 4.4.9-1.1 4.4" fill="none" stroke="#fff" strokeWidth="1.2" opacity=".55" strokeLinecap="round" />
+      <text x="16" y="20.2" textAnchor="middle" fontFamily="Fredoka, system-ui, sans-serif" fontWeight="700" fontSize="9.5" fill="#fff" stroke="#123a63" strokeWidth=".6" paintOrder="stroke">XP</text>
     </svg>
   );
 }

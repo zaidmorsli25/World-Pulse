@@ -19,7 +19,7 @@ export function validatePassword(pw: string) {
 const anonClient = () => createClient(serverEnv.supabaseUrl, serverEnv.supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
 /** Returns the new user id, or null when the account needs email confirmation first. */
-export async function signUp(email: string, username: string, password: string): Promise<{ userId: string | null; needsConfirmation: boolean }> {
+export async function signUp(email: string, username: string, password: string, origin = ""): Promise<{ userId: string | null; needsConfirmation: boolean; pendingUserId?: string }> {
   email = email.trim().toLowerCase();
   if (!USERNAME_RE.test(username)) throw new HttpError(400, "Usernames are 3–20 letters, numbers, dots, dashes or underscores.", "bad_username");
   validatePassword(password);
@@ -27,7 +27,14 @@ export async function signUp(email: string, username: string, password: string):
   if (await store.findUserByUsername(username)) throw new HttpError(409, "That username is taken.", "username_taken");
 
   if (supabaseConfigured()) {
-    const { data, error } = await anonClient().auth.signUp({ email, password, options: { data: { username } } });
+    // After the player clicks the link in the confirmation email, Supabase sends them back to the
+    // game (with a one-time token in the URL), and the game logs them straight in.
+    const site = process.env.NEXT_PUBLIC_SITE_URL || origin;
+    const { data, error } = await anonClient().auth.signUp({
+      email,
+      password,
+      options: { data: { username }, ...(site ? { emailRedirectTo: `${site.replace(/\/$/, "")}/?confirmed=1` } : {}) },
+    });
     if (error || !data.user) throw new HttpError(400, error?.message ?? "Could not create the account.", "signup_failed");
     // Supabase returns an obfuscated user (no identities) when the email already exists.
     if (data.user.identities && data.user.identities.length === 0) throw new HttpError(409, "An account with this email already exists.", "email_taken");
@@ -38,7 +45,7 @@ export async function signUp(email: string, username: string, password: string):
       -1,
       [],
     );
-    return { userId: data.session ? userId : null, needsConfirmation: !data.session };
+    return { userId: data.session ? userId : null, needsConfirmation: !data.session, pendingUserId: data.session ? undefined : userId };
   }
 
   if (await store.findUserByEmail(email)) throw new HttpError(409, "An account with this email already exists.", "email_taken");
@@ -109,4 +116,21 @@ export async function resetPassword(params: { token?: string; accessToken?: stri
   if (!userId) throw new HttpError(400, "This reset link is invalid or has expired.", "bad_token");
   await getStore().setPasswordHash(userId, await hashPassword(password));
   return userId;
+}
+
+const adminClient = () => createClient(serverEnv.supabaseUrl, serverEnv.supabaseServiceKey, { auth: { persistSession: false } });
+
+/** The player came back from the confirmation email: check the one-time token and return their id. */
+export async function confirmEmail(accessToken: string): Promise<string> {
+  if (!supabaseConfigured()) throw new HttpError(400, "Email confirmation is not used here.", "not_supported");
+  const { data, error } = await adminClient().auth.getUser(accessToken);
+  if (error || !data.user || !data.user.email_confirmed_at) throw new HttpError(400, "This confirmation link is invalid or has expired. Try logging in.", "bad_token");
+  return data.user.id;
+}
+
+/** True once the account created in this browser has confirmed its email address. */
+export async function isEmailConfirmed(userId: string): Promise<boolean> {
+  if (!supabaseConfigured()) return true;
+  const { data, error } = await adminClient().auth.admin.getUserById(userId);
+  return !error && !!data.user?.email_confirmed_at;
 }

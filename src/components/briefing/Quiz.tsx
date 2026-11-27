@@ -8,7 +8,7 @@ import type { NewsEvent, PublicQuiz } from "@/lib/types";
 import { FigureBadge } from "../figures/FigureBadge";
 import { useGame } from "../game/GameProvider";
 import { AnimatedNumber, Confetti, XPBar } from "../ui/bits";
-import { Coin } from "../ui/icons";
+import { Coin, XpIcon } from "../ui/icons";
 import { CountrySilhouette, LETTERS, QuizRegionMap } from "./MiniMap";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -264,8 +264,8 @@ function QuizResults({ result, xpBefore, replay, onDone, onReview }: { result: C
           <div className="text-sm text-navy-700">coins earned</div>
         </motion.div>
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.65 }} className="rounded-2xl bg-ocean-400/15 p-4">
-          <div className="font-display text-3xl font-bold text-navy-900">
-            +<AnimatedNumber value={result.xp} /> XP
+          <div className="flex items-center justify-center gap-1.5 font-display text-3xl font-bold text-navy-900">
+            <XpIcon size={28} />+<AnimatedNumber value={result.xp} /> XP
           </div>
           <div className="text-sm text-navy-700">experience</div>
         </motion.div>

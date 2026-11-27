@@ -49,7 +49,7 @@ export function HeadquartersSection() {
           </div>
           {slot === "display" && (
             <p className="mb-2 text-sm text-navy-700/80">
-              Display shelf: {shelf.length} of {MAX_DISPLAY} spaces used. Collectibles are cosmetic only.
+              Display shelf: {shelf.length} of {MAX_DISPLAY} spaces used.
             </p>
           )}
           {owned.length === 0 ? (

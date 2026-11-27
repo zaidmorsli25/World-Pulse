@@ -4,7 +4,7 @@ import { MISSIONS_BY_ID } from "@/lib/game/missions";
 import { useGame } from "../game/GameProvider";
 import { TIER_LABEL } from "../map/Markers";
 import { fmtDate, SectionPanel, timeAgo } from "../ui/bits";
-import { CATEGORY_META, CategoryIcon, Coin, NavIcon } from "../ui/icons";
+import { CATEGORY_META, CategoryIcon, Coin, NavIcon, XpIcon } from "../ui/icons";
 
 export function MissionsCard() {
   const { player, backend, run } = useGame();
@@ -30,7 +30,7 @@ export function MissionsCard() {
                   <motion.div className="h-full rounded-full bg-gold-400" initial={false} animate={{ width: `${(prog / m.target) * 100}%` }} />
                 </div>
                 <p className="mt-1 text-xs text-white/70">
-                  {prog}/{m.target} · reward <Coin size={12} /> {m.coins} + {m.xp} XP
+                  {prog}/{m.target} · reward <Coin size={12} /> {m.coins} + <XpIcon size={12} /> {m.xp} XP
                 </p>
               </div>
               {claimed ? (
@@ -134,7 +134,7 @@ export function DailyBriefingSection() {
             </h2>
             <p className="mt-1 text-sm text-navy-700">Best: {player.streak.best} days. Each day you return adds a small coin bonus.</p>
             <p className="mt-2 text-sm text-navy-700">
-              🛡️ Streak shields: <b>{player.streak.shields}</b>. A shield covers one missed day automatically, and you earn one every 7 days. Missing days never costs you coins or progress.
+              🛡️ Streak shields: <b>{player.streak.shields}</b>. A shield covers 1 missed day automatically, and you earn 1 every 7 days. Missing days never costs you coins or progress.
             </p>
           </div>
         </div>

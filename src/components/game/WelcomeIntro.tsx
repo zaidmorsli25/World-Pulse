@@ -1,12 +1,12 @@
 "use client";
-// A short four-step introduction shown once per player on this device.
+// A short 4-step introduction shown once per player on this device.
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { REWARDS } from "@/lib/config";
-import { CATEGORIES } from "@/lib/types";
 import { TIER_LABEL, TIER_SIZE } from "../map/Markers";
 import { Modal } from "../ui/Modal";
-import { CategoryIcon, CATEGORY_META, Coin } from "../ui/icons";
+import { Coin, XpIcon } from "../ui/icons";
+import { BriefingArt, HQArt, MarkersArt, WelcomeArt } from "./IntroArt";
 import { useGame } from "./GameProvider";
 
 const key = (userId: string) => `worldpulse-intro-${userId}`;
@@ -42,7 +42,7 @@ export function WelcomeIntro() {
           <p className="mt-2">Read short briefings, answer quick questions, earn coins and XP, and climb from Recruit to Global Strategist.</p>
         </>
       ),
-      art: <div className="text-7xl">🌍</div>,
+      art: <WelcomeArt />,
     },
     {
       title: "Mission markers",
@@ -52,42 +52,41 @@ export function WelcomeIntro() {
           <p className="mt-2">Click a country to see its capital, leaders, relationships and active news.</p>
         </>
       ),
-      art: (
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex items-end gap-2">
-            {(["minor", "notable", "significant", "major", "global"] as const).map((t, i) => (
-              <div key={t} className="flex flex-col items-center gap-1">
-                <span className="grid place-items-center rounded-xl text-white shadow-game ring-2 ring-white" style={{ width: TIER_SIZE[t], height: TIER_SIZE[t], background: CATEGORY_META[CATEGORIES[i]].color }}>
-                  <CategoryIcon category={CATEGORIES[i]} size={TIER_SIZE[t] * 0.55} />
-                </span>
-                <span className="text-[10px] font-semibold text-navy-700">{TIER_LABEL[t]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ),
+      art: <MarkersArt tiers={(["minor", "notable", "significant", "major", "global"] as const).map((t) => ({ label: TIER_LABEL[t], size: TIER_SIZE[t] }))} />,
     },
     {
       title: "Briefings and quizzes",
       body: (
         <>
-          <p>Open a marker for a two-to-four minute briefing with links to the original reporting. Then take a short quiz.</p>
-          <p className="mt-2 flex flex-wrap items-center gap-1">
-            Each correct answer earns <Coin size={14} /> {REWARDS.coinsPerCorrect} and {REWARDS.xpPerCorrect} XP. A perfect score adds a bonus of <Coin size={14} /> {REWARDS.perfectBonusCoins}.
+          <p>Open a marker for a 2 to 4 minute briefing with links to the original reporting. Then take a short quiz.</p>
+          <p className="mt-2">
+            Each correct answer earns{" "}
+            <span className="inline-flex items-center gap-1 whitespace-nowrap align-[-2px] font-semibold">
+              <Coin size={15} /> {REWARDS.coinsPerCorrect} coins
+            </span>{" "}
+            and{" "}
+            <span className="inline-flex items-center gap-1 whitespace-nowrap align-[-2px] font-semibold">
+              <XpIcon size={16} /> {REWARDS.xpPerCorrect} XP
+            </span>
+            . A perfect score adds a bonus of{" "}
+            <span className="inline-flex items-center gap-1 whitespace-nowrap align-[-2px] font-semibold">
+              <Coin size={15} /> {REWARDS.perfectBonusCoins}
+            </span>
+            .
           </p>
         </>
       ),
-      art: <div className="text-7xl">📰</div>,
+      art: <BriefingArt />,
     },
     {
       title: "Build your headquarters",
       body: (
         <>
-          <p>Spend coins in the shop on outfits, office upgrades and collectible models. Promotions unlock new items and free rewards. Everything is cosmetic, and there is no real money.</p>
+          <p>Spend coins in the shop on outfits, office upgrades and collectible models. Promotions unlock new items and free rewards.</p>
           {news?.mode === "demo" && <p className="mt-2 rounded-xl bg-gold-300/30 px-3 py-2 text-sm">Live news isn&apos;t connected right now, so the map shows clearly labelled fictional demo scenarios.</p>}
         </>
       ),
-      art: <div className="text-7xl">🏛️</div>,
+      art: <HQArt />,
     },
   ];
   const s = steps[step];
@@ -98,7 +97,7 @@ export function WelcomeIntro() {
       <div className="p-6 text-navy-900 sm:p-8">
         <AnimatePresence mode="wait">
           <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
-            <div className="mb-4 grid h-32 place-items-center rounded-2xl bg-gradient-to-br from-ocean-400/20 to-land-400/20">{s.art}</div>
+            <div className="mb-4 aspect-[36/17] w-full overflow-hidden rounded-2xl bg-navy-900 ring-1 ring-navy-900/10">{s.art}</div>
             <h2 className="font-display text-2xl font-bold">{s.title}</h2>
             <div className="mt-2 text-navy-800">{s.body}</div>
           </motion.div>
@@ -110,7 +109,11 @@ export function WelcomeIntro() {
             ))}
           </div>
           <div className="flex gap-2">
-            {!last && (
+            {step > 0 ? (
+              <button className="btn btn-ghost" onClick={() => setStep(step - 1)}>
+                Back
+              </button>
+            ) : (
               <button className="btn btn-ghost" onClick={close}>
                 Skip
               </button>

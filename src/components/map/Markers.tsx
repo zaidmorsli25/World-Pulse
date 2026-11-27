@@ -2,7 +2,7 @@
 import type { GeoProjection } from "d3-geo";
 import type { ZoomTransform } from "d3-zoom";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { sound } from "@/lib/client/sound";
 import type { NewsEvent, Tier } from "@/lib/types";
 import { CATEGORY_META, CategoryIcon } from "../ui/icons";
@@ -12,6 +12,10 @@ export const TIER_LABEL: Record<Tier, string> = { minor: "Minor", notable: "Nota
 
 interface Placed {
   e: NewsEvent;
+  /** position on the un-zoomed map */
+  bx: number;
+  by: number;
+  /** position at the current zoom level, before panning (only used for clustering) */
   x: number;
   y: number;
   size: number;
@@ -20,6 +24,23 @@ interface Group {
   x: number;
   y: number;
   members: Placed[];
+}
+
+/**
+ * Moves every marker to its spot for the given zoom/pan. Called directly from the map's zoom
+ * handler (and after each render), so markers move in the very same frame as the map itself
+ * instead of a frame later, which is what made them wobble during fast drags.
+ */
+export function positionMarkers(layer: HTMLElement | null, t: ZoomTransform) {
+  if (!layer) return;
+  const w = layer.clientWidth;
+  const h = layer.clientHeight;
+  layer.querySelectorAll<HTMLElement>("[data-bx]").forEach((el) => {
+    const x = t.applyX(Number(el.dataset.bx));
+    const y = t.applyY(Number(el.dataset.by));
+    el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    el.style.visibility = x < -80 || y < -80 || x > w + 80 || y > h + 80 ? "hidden" : "";
+  });
 }
 
 export function MarkerButton({ e, size, done, onClick, tabIndex }: { e: NewsEvent; size: number; done: boolean; onClick: () => void; tabIndex?: number }) {
@@ -63,24 +84,22 @@ export function MarkerButton({ e, size, done, onClick, tabIndex }: { e: NewsEven
   );
 }
 
-export function MarkerLayer({
-  events,
-  completed,
-  projection,
-  transform,
-  onEvent,
-  zoomToBounds,
-  size,
-}: {
-  events: NewsEvent[];
-  completed: Set<string>;
-  projection: GeoProjection;
-  transform: ZoomTransform;
-  onEvent: (id: string) => void;
-  zoomToBounds: (b: [[number, number], [number, number]], maxK?: number) => void;
-  size: { w: number; h: number };
-}) {
+export const MarkerLayer = forwardRef<
+  HTMLDivElement,
+  {
+    events: NewsEvent[];
+    completed: Set<string>;
+    projection: GeoProjection;
+    transform: ZoomTransform;
+    liveTransform: MutableRefObject<ZoomTransform>;
+    onEvent: (id: string) => void;
+    zoomToBounds: (b: [[number, number], [number, number]], maxK?: number) => void;
+    size: { w: number; h: number };
+  }
+>(function MarkerLayer({ events, completed, projection, transform, liveTransform, onEvent, zoomToBounds }, ref) {
   const [expanded, setExpanded] = useState<number | null>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  useImperativeHandle(ref, () => layerRef.current as HTMLDivElement);
 
   const base = useMemo(
     () =>
@@ -94,9 +113,11 @@ export function MarkerLayer({
   );
 
   // Greedy screen-space clustering: biggest events first, smaller ones merge into nearby groups.
+  // Distances on screen depend only on the zoom level, not on panning, so this only reruns on zoom.
+  const k = transform.k;
   const groups = useMemo(() => {
     const placed: Placed[] = base
-      .map(({ e, bx, by }) => ({ e, x: transform.applyX(bx), y: transform.applyY(by), size: TIER_SIZE[e.importance.tier] }))
+      .map(({ e, bx, by }) => ({ e, bx, by, x: bx * k, y: by * k, size: TIER_SIZE[e.importance.tier] }))
       .sort((a, b) => b.e.importance.score - a.e.importance.score);
     const gs: Group[] = [];
     for (const m of placed) {
@@ -105,27 +126,31 @@ export function MarkerLayer({
       else gs.push({ x: m.x, y: m.y, members: [m] });
     }
     return gs;
-  }, [base, transform]);
+  }, [base, k]);
+
+  // Place markers for the current view before the browser paints.
+  useLayoutEffect(() => positionMarkers(layerRef.current, liveTransform.current));
 
   // collapse an expanded group when the zoom level changes
   const zoomKey = Math.round(transform.k * 10);
   useEffect(() => setExpanded(null), [zoomKey]);
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10">
+    <div ref={layerRef} className="pointer-events-none absolute inset-0 z-10">
       {groups.map((g, gi) => {
-        if (g.x < -80 || g.y < -80 || g.x > size.w + 80 || g.y > size.h + 80) return null;
         const lead = g.members[0];
         if (g.members.length === 1)
           return (
-            <div key={lead.e.id} className="pointer-events-auto absolute" style={{ left: g.x - lead.size / 2, top: g.y - lead.size / 2 }}>
-              <MarkerButton e={lead.e} size={lead.size} done={completed.has(lead.e.quizId)} onClick={() => onEvent(lead.e.id)} />
+            <div key={lead.e.id} data-bx={lead.bx} data-by={lead.by} className="pointer-events-auto absolute left-0 top-0 will-change-transform">
+              <div style={{ marginLeft: -lead.size / 2, marginTop: -lead.size / 2 }}>
+                <MarkerButton e={lead.e} size={lead.size} done={completed.has(lead.e.quizId)} onClick={() => onEvent(lead.e.id)} />
+              </div>
             </div>
           );
         const isOpen = expanded === gi;
         const r = Math.max(56, g.members.length * 14);
         return (
-          <div key={`g-${lead.e.id}`} className="pointer-events-auto absolute" style={{ left: g.x, top: g.y }}>
+          <div key={`g-${lead.e.id}`} data-bx={lead.bx} data-by={lead.by} className="pointer-events-auto absolute left-0 top-0 will-change-transform">
             <AnimatePresence>
               {isOpen &&
                 g.members.map((m, i) => {
@@ -155,14 +180,14 @@ export function MarkerLayer({
                 const xs = g.members.map((m) => m.x);
                 const ys = g.members.map((m) => m.y);
                 const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-                if (spread > 6 && transform.k < 30) {
-                  const inv = (x: number, y: number) => transform.invert([x, y]);
-                  const [x0, y0] = inv(Math.min(...xs) - 40, Math.min(...ys) - 40);
-                  const [x1, y1] = inv(Math.max(...xs) + 40, Math.max(...ys) + 40);
+                if (spread > 6 && k < 30) {
+                  const bxs = g.members.map((m) => m.bx);
+                  const bys = g.members.map((m) => m.by);
+                  const pad = 40 / k;
                   zoomToBounds(
                     [
-                      [x0, y0],
-                      [x1, y1],
+                      [Math.min(...bxs) - pad, Math.min(...bys) - pad],
+                      [Math.max(...bxs) + pad, Math.max(...bys) + pad],
                     ],
                     48,
                   );
@@ -188,4 +213,4 @@ export function MarkerLayer({
       })}
     </div>
   );
-}
+});

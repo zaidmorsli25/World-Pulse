@@ -77,7 +77,7 @@ export const CATALOG: ShopItem[] = [
   i({ id: "mon-laptop", name: "Trusty Laptop", slot: "monitor", rarity: "common", price: 0, minRank: 0, starter: true, description: "Covered in stickers.", art: "laptop", color: "#a9b4c2" }),
   i({ id: "mon-dual", name: "Dual Monitors", slot: "monitor", rarity: "uncommon", price: 350, minRank: 0, description: "Twice the news feeds.", art: "dual", color: "#2a2f37", accent: "#5fb3ff" }),
   i({ id: "mon-analyst", name: "Analyst Workstation", slot: "monitor", rarity: "rare", price: 0, minRank: 4, rankReward: true, description: "Awarded on promotion to Intelligence Analyst.", art: "dual", color: "#1d2a24", accent: "#57d38c" }),
-  i({ id: "mon-wall", name: "Intelligence Monitor Wall", slot: "monitor", rarity: "epic", price: 1400, minRank: 4, description: "Nine screens of world updates.", art: "wall", color: "#141b24", accent: "#ffb347" }),
+  i({ id: "mon-wall", name: "Intelligence Monitor Wall", slot: "monitor", rarity: "epic", price: 1400, minRank: 4, description: "9 screens of world updates.", art: "wall", color: "#141b24", accent: "#ffb347" }),
 
   // ---------------------------------------------------------------- bookshelves
   i({ id: "shelf-crate", name: "Crate Bookshelf", slot: "bookshelf", rarity: "common", price: 0, minRank: 0, starter: true, description: "Stacked fruit crates. It works.", art: "shelf", color: "#b08a5b" }),
@@ -99,7 +99,7 @@ export const CATALOG: ShopItem[] = [
   i({ id: "col-airliner", name: "Airliner Model", slot: "display", rarity: "common", price: 150, minRank: 0, description: "A long-haul airliner in desk scale.", art: "airliner", color: "#e8edf2", accent: "#2f80ed" }),
   i({ id: "col-tank-classic", name: "Classic Tank Model", slot: "display", rarity: "uncommon", price: 300, minRank: 0, description: "A museum-style historical tank model.", art: "tank", color: "#6b7a4b" }),
   i({ id: "col-jet", name: "Jet Fighter Model", slot: "display", rarity: "uncommon", price: 320, minRank: 1, description: "Die-cast display jet on a stand.", art: "jet", color: "#8b98a7" }),
-  i({ id: "col-rover", name: "Planetary Rover Model", slot: "display", rarity: "uncommon", price: 400, minRank: 1, description: "Six wheels, one curious robot.", art: "rover", color: "#c9ccd1", accent: "#d4a73a" }),
+  i({ id: "col-rover", name: "Planetary Rover Model", slot: "display", rarity: "uncommon", price: 400, minRank: 1, description: "6 wheels, 1 curious robot.", art: "rover", color: "#c9ccd1", accent: "#d4a73a" }),
   i({ id: "col-frigate", name: "Frigate Model", slot: "display", rarity: "rare", price: 600, minRank: 2, description: "A grey naval frigate on a wooden base.", art: "ship", color: "#7d8a99" }),
   i({ id: "col-tank-modern", name: "Modern Tank Model", slot: "display", rarity: "rare", price: 650, minRank: 2, description: "Desert-camo display model.", art: "tank", color: "#b59a6a" }),
   i({ id: "col-sub", name: "Submarine Model", slot: "display", rarity: "rare", price: 700, minRank: 3, description: "Sleek and silent.", art: "sub", color: "#2b323b" }),

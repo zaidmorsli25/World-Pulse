@@ -7,7 +7,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COUNTRY_BY_ID, useWorld } from "@/lib/client/world";
 import type { NewsEvent } from "@/lib/types";
 import { NavIcon } from "../ui/icons";
-import { MarkerLayer } from "./Markers";
+import { MarkerLayer, positionMarkers } from "./Markers";
 
 const LAND_TONES = ["#7dba67", "#86c06e", "#74b161", "#8fc677", "#7ab565", "#93c97c"];
 const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -34,12 +34,21 @@ const REGION_BOXES: Record<string, [[number, number], [number, number]]> = {
   "Middle East": [[25, 12], [63, 42]],
 };
 
+/** On-screen size of a country name, in pixels: readable for small countries, never huge. */
+function labelSize(area: number, k: number) {
+  const side = Math.sqrt(area) * k;
+  return Math.max(12, Math.min(18, 9.5 + side * 0.03));
+}
+
 function WorldMapInner(p: MapProps) {
   const { world, error } = useWorld();
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement>(null);
-  const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const zoomRef = useRef<ZoomBehavior<HTMLDivElement, unknown> | null>(null);
+  const markerLayerRef = useRef<HTMLDivElement>(null);
+  /** The latest zoom transform, updated synchronously on every pan/zoom frame. */
+  const liveT = useRef<ZoomTransform>(zoomIdentity);
   const [size, setSize] = useState({ w: 1200, h: 700 });
   const [t, setT] = useState<ZoomTransform>(zoomIdentity);
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -88,18 +97,22 @@ function WorldMapInner(p: MapProps) {
     };
   }, [world, path]);
 
-  // d3-zoom: pan + zoom with mouse, wheel, touch and trackpad.
+  // d3-zoom: pan + zoom with mouse, wheel, touch and trackpad. It listens on the whole map area,
+  // markers included, so scrolling or pinching over a marker still zooms the map.
   useEffect(() => {
-    const svg = svgRef.current;
+    const svg = wrapRef.current;
     if (!svg) return;
-    const z = d3zoom<SVGSVGElement, unknown>()
+    const z = d3zoom<HTMLDivElement, unknown>()
       .scaleExtent([1, 48])
       .translateExtent([
         [-size.w * 0.15, -size.h * 0.1],
         [size.w * 1.15, size.h * 1.1],
       ])
       .on("zoom", (ev) => {
+        liveT.current = ev.transform;
         if (gRef.current) gRef.current.setAttribute("transform", ev.transform.toString());
+        // Move the markers in the same frame as the map so they never lag or wobble while dragging.
+        positionMarkers(markerLayerRef.current, ev.transform);
         cancelAnimationFrame(raf.current);
         raf.current = requestAnimationFrame(() => setT(ev.transform));
       });
@@ -118,7 +131,7 @@ function WorldMapInner(p: MapProps) {
 
   const zoomToBounds = useCallback(
     (b: [[number, number], [number, number]], maxK = 12) => {
-      const svg = svgRef.current;
+      const svg = wrapRef.current;
       const z = zoomRef.current;
       if (!svg || !z) return;
       const [[x0, y0], [x1, y1]] = b;
@@ -136,7 +149,7 @@ function WorldMapInner(p: MapProps) {
   );
 
   const zoomBy = (f: number) => {
-    const svg = svgRef.current;
+    const svg = wrapRef.current;
     if (svg && zoomRef.current)
       select(svg)
         .transition()
@@ -144,7 +157,7 @@ function WorldMapInner(p: MapProps) {
         .call(zoomRef.current.scaleBy, f);
   };
   const reset = () => {
-    const svg = svgRef.current;
+    const svg = wrapRef.current;
     if (svg && zoomRef.current)
       select(svg)
         .transition()
@@ -189,7 +202,8 @@ function WorldMapInner(p: MapProps) {
   const labels = useMemo(() => {
     if (!shapes || !p.showLabels) return [];
     return shapes.countries
-      .filter((c) => c.id !== "ATA" && c.area * k * k > 2600 && Number.isFinite(c.centroid[0]))
+      // show a name only once the country is wide enough on screen to hold it
+      .filter((c) => c.id !== "ATA" && Number.isFinite(c.centroid[0]) && Math.sqrt(c.area) * k > Math.max(44, c.name.length * labelSize(c.area, k) * 0.42))
       .sort((a, b) => b.area - a.area)
       .slice(0, 90);
   }, [shapes, k, p.showLabels]);
@@ -198,7 +212,7 @@ function WorldMapInner(p: MapProps) {
   const hovered = hover ? COUNTRY_BY_ID.get(hover.id) : null;
 
   return (
-    <div ref={wrapRef} className="absolute inset-0 overflow-hidden" style={{ background: "radial-gradient(ellipse at 50% 40%, #2a7fc4 0%, #1d63a3 55%, #154c82 100%)" }}>
+    <div ref={wrapRef} className="absolute inset-0 touch-none overflow-hidden" style={{ background: "radial-gradient(ellipse at 50% 40%, #2a7fc4 0%, #1d63a3 55%, #154c82 100%)" }}>
       <svg ref={svgRef} width={size.w} height={size.h} className="block touch-none select-none" role="img" aria-label="Interactive world map. Use the search box to find countries, or the zoom buttons to zoom.">
         <defs>
           <radialGradient id="ocean" cx="50%" cy="45%" r="70%">
@@ -268,7 +282,7 @@ function WorldMapInner(p: MapProps) {
                   y={c.centroid[1]}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={Math.min(13, 6 + Math.sqrt(c.area) * 0.06) / k}
+                  fontSize={labelSize(c.area, k) / k}
                   fontFamily="'Fredoka Variable', system-ui"
                   fontWeight={600}
                   fill={eventCountries.has(c.id) ? "#173a1a" : "#24502a"}
@@ -287,7 +301,7 @@ function WorldMapInner(p: MapProps) {
         </g>
       </svg>
 
-      <MarkerLayer events={p.events} completed={p.completed} projection={projection} transform={t} onEvent={p.onEvent} zoomToBounds={zoomToBounds} size={size} />
+      <MarkerLayer ref={markerLayerRef} liveTransform={liveT} events={p.events} completed={p.completed} projection={projection} transform={t} onEvent={p.onEvent} zoomToBounds={zoomToBounds} size={size} />
 
       {hovered && hover && (
         <div className="pointer-events-none fixed z-30 rounded-xl bg-navy-900/90 px-3 py-1.5 text-sm font-semibold text-white shadow-game" style={{ left: hover.x + 14, top: hover.y + 14 }}>
