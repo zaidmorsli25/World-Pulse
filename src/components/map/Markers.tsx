@@ -43,17 +43,43 @@ export function positionMarkers(layer: HTMLElement | null, t: ZoomTransform) {
   });
 }
 
-export function MarkerButton({ e, size, done, onClick, tabIndex }: { e: NewsEvent; size: number; done: boolean; onClick: () => void; tabIndex?: number }) {
+/** Browsers send emulated mouse events right after a tap; those are not real hovers. */
+let lastTouchAt = 0;
+const isRealHover = (pointerType: string) => pointerType !== "touch" && Date.now() - lastTouchAt > 800;
+
+export interface MarkerExtras {
+  /** colors of the trends this story belongs to */
+  dots?: string[];
+  /** faded because another trend or story is in focus */
+  dim?: boolean;
+  /** pointer or keyboard focus entered/left the marker */
+  onHover?: (on: boolean) => void;
+}
+
+export function MarkerButton({ e, size, done, onClick, tabIndex, dots, dim, onHover }: { e: NewsEvent; size: number; done: boolean; onClick: (pointerType: string) => void; tabIndex?: number } & MarkerExtras) {
+  const lastPointer = useRef("mouse");
   const meta = CATEGORY_META[e.category];
   const global = e.importance.tier === "global" || e.importance.tier === "major";
   return (
     <motion.button
       type="button"
       tabIndex={tabIndex}
+      onPointerDown={(ev) => {
+        lastPointer.current = ev.pointerType;
+        if (ev.pointerType === "touch") lastTouchAt = Date.now();
+      }}
+      onPointerEnter={(ev) => isRealHover(ev.pointerType) && onHover?.(true)}
+      onPointerLeave={(ev) => isRealHover(ev.pointerType) && onHover?.(false)}
+      onFocus={(ev) => ev.currentTarget.matches(":focus-visible") && onHover?.(true)}
+      onBlur={() => onHover?.(false)}
       onClick={(ev) => {
         ev.stopPropagation();
         sound.play("click");
-        onClick();
+        // a keyboard "click" has no pointer down before it
+        const pt = (ev.nativeEvent as PointerEvent).pointerType || lastPointer.current;
+        if (pt === "touch") lastTouchAt = Date.now();
+        onClick(ev.detail === 0 && !pt ? "keyboard" : pt);
+        lastPointer.current = "mouse";
       }}
       whileHover={{ scale: 1.12, y: -3 }}
       whileTap={{ scale: 0.92 }}
@@ -64,7 +90,9 @@ export function MarkerButton({ e, size, done, onClick, tabIndex }: { e: NewsEven
         background: `linear-gradient(160deg, ${meta.color} 0%, ${meta.dark} 100%)`,
         boxShadow: `0 ${size * 0.1}px 0 ${meta.dark}, 0 ${size * 0.16}px ${size * 0.3}px rgba(8,17,31,0.45), inset 0 2px 0 rgba(255,255,255,0.35)`,
         border: "2px solid rgba(255,255,255,0.85)",
-        opacity: done ? 0.78 : 1,
+        opacity: dim ? 0.32 : done ? 0.78 : 1,
+        filter: dim ? "saturate(0.4)" : undefined,
+        transition: "opacity 200ms, filter 200ms",
       }}
       aria-label={`${meta.label} briefing: ${e.title}. Importance ${TIER_LABEL[e.importance.tier]}${done ? ". Completed" : ""}`}
     >
@@ -72,6 +100,13 @@ export function MarkerButton({ e, size, done, onClick, tabIndex }: { e: NewsEven
       <CategoryIcon category={e.category} size={size * 0.58} />
       {done && (
         <span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-land-500 text-[11px] font-bold text-white ring-2 ring-white">✓</span>
+      )}
+      {dots && dots.length > 0 && (
+        <span className="absolute -left-1.5 -top-1.5 flex gap-0.5" aria-hidden>
+          {dots.map((c) => (
+            <span key={c} className="block h-3.5 w-3.5 rounded-full ring-2 ring-white" style={{ background: c, boxShadow: "0 1px 3px rgba(8,17,31,0.5)" }} />
+          ))}
+        </span>
       )}
       {e.isDemo && <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-navy-900/85 px-1.5 text-[8px] font-bold uppercase tracking-wider text-gold-300">demo</span>}
       <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-56 -translate-x-1/2 rounded-xl bg-navy-900/95 px-3 py-2 text-left text-xs font-medium leading-snug text-white shadow-game group-hover:block group-focus-visible:block">
@@ -92,11 +127,16 @@ export const MarkerLayer = forwardRef<
     projection: GeoProjection;
     transform: ZoomTransform;
     liveTransform: MutableRefObject<ZoomTransform>;
-    onEvent: (id: string) => void;
+    onEvent: (id: string, pointerType: string) => void;
     zoomToBounds: (b: [[number, number], [number, number]], maxK?: number) => void;
     size: { w: number; h: number };
+    trendDots: Map<string, string[]>;
+    /** when set, markers outside it fade */
+    highlight: Set<string> | null;
+    onHover: (id: string | null) => void;
   }
->(function MarkerLayer({ events, completed, projection, transform, liveTransform, onEvent, zoomToBounds }, ref) {
+>(function MarkerLayer({ events, completed, projection, transform, liveTransform, onEvent, zoomToBounds, trendDots, highlight, onHover }, ref) {
+  const extras = (id: string): MarkerExtras => ({ dots: trendDots.get(id), dim: !!highlight && !highlight.has(id), onHover: (on) => onHover(on ? id : null) });
   const [expanded, setExpanded] = useState<number | null>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => layerRef.current as HTMLDivElement);
@@ -143,12 +183,14 @@ export const MarkerLayer = forwardRef<
           return (
             <div key={lead.e.id} data-bx={lead.bx} data-by={lead.by} className="pointer-events-auto absolute left-0 top-0 will-change-transform">
               <div style={{ marginLeft: -lead.size / 2, marginTop: -lead.size / 2 }}>
-                <MarkerButton e={lead.e} size={lead.size} done={completed.has(lead.e.quizId)} onClick={() => onEvent(lead.e.id)} />
+                <MarkerButton e={lead.e} size={lead.size} done={completed.has(lead.e.quizId)} onClick={(pt) => onEvent(lead.e.id, pt)} {...extras(lead.e.id)} />
               </div>
             </div>
           );
         const isOpen = expanded === gi;
         const r = Math.max(56, g.members.length * 14);
+        const groupDim = !!highlight && !g.members.some((m) => highlight.has(m.e.id));
+        const groupDots = [...new Set(g.members.flatMap((m) => trendDots.get(m.e.id) ?? []))];
         return (
           <div key={`g-${lead.e.id}`} data-bx={lead.bx} data-by={lead.by} className="pointer-events-auto absolute left-0 top-0 will-change-transform">
             <AnimatePresence>
@@ -165,7 +207,7 @@ export const MarkerLayer = forwardRef<
                       exit={{ x: -s / 2, y: -s / 2, opacity: 0, scale: 0.4 }}
                       transition={{ type: "spring", stiffness: 380, damping: 26, delay: i * 0.02 }}
                     >
-                      <MarkerButton e={m.e} size={s} done={completed.has(m.e.quizId)} onClick={() => onEvent(m.e.id)} />
+                      <MarkerButton e={m.e} size={s} done={completed.has(m.e.quizId)} onClick={(pt) => onEvent(m.e.id, pt)} {...extras(m.e.id)} />
                     </motion.div>
                   );
                 })}
@@ -201,11 +243,20 @@ export const MarkerLayer = forwardRef<
                 top: -(lead.size + 6) / 2,
                 background: `linear-gradient(160deg, ${CATEGORY_META[lead.e.category].color}, ${CATEGORY_META[lead.e.category].dark})`,
                 boxShadow: "0 5px 0 rgba(8,17,31,0.45), 0 8px 18px rgba(8,17,31,0.45), 6px -6px 0 -2px rgba(255,255,255,0.75), 6px -6px 0 0 rgba(13,26,46,0.6)",
+                opacity: groupDim ? 0.32 : 1,
+                transition: "opacity 200ms",
               }}
               aria-label={`${g.members.length} news events in this area. ${isOpen ? "Collapse" : "Show them"}`}
               aria-expanded={isOpen}
             >
               <CategoryIcon category={lead.e.category} size={(lead.size + 6) * 0.5} />
+              {groupDots.length > 0 && (
+                <span className="absolute -left-1.5 -top-1.5 flex gap-0.5" aria-hidden>
+                  {groupDots.map((c) => (
+                    <span key={c} className="block h-3.5 w-3.5 rounded-full ring-2 ring-white" style={{ background: c }} />
+                  ))}
+                </span>
+              )}
               <span className="absolute -right-2.5 -top-2.5 grid h-6 min-w-6 place-items-center rounded-full bg-gold-400 px-1 font-display text-xs font-bold text-navy-900 ring-2 ring-white">{g.members.length}</span>
             </motion.button>
           </div>

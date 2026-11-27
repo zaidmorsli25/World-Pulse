@@ -4,6 +4,8 @@
  * progress in this browser's localStorage. Passwords are hashed with PBKDF2 (WebCrypto).
  * It exists so the game can be tried without a server; real deployments use the server API.
  */
+import { buildDemoTrends } from "@/data/demo/trends";
+import { toPublicTrends } from "@/lib/trends";
 import { REWARDS } from "@/lib/config";
 import { buildDemoContent } from "@/data/demo/events";
 import { FIGURE_IDS } from "@/data/figures";
@@ -135,13 +137,13 @@ export const browserBackend: Backend = {
       const n = QUIZZES.get(e.quizId)?.questions.length ?? 0;
       if (n) maxCoins[e.id] = n * REWARDS.coinsPerCorrect + REWARDS.perfectBonusCoins;
     }
-    return { mode: "demo", updatedAt: anchor.toISOString(), events: content.events, maxCoins };
+    return { mode: "demo", updatedAt: anchor.toISOString(), events: content.events, maxCoins, trends: toPublicTrends(buildDemoTrends(content.events, anchor), content.events) };
   },
   async signup(email, username, password) {
     const db = load();
     email = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new ApiError("Enter a valid email address.", 400, "invalid_input");
-    if (!USERNAME_RE.test(username)) throw new ApiError("Usernames are 3–20 letters, numbers, dots, dashes or underscores.", 400, "bad_username");
+    if (!USERNAME_RE.test(username)) throw new ApiError("Usernames are 3 to 20 letters, numbers, dots, dashes or underscores.", 400, "bad_username");
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) throw new ApiError("Use at least 8 characters with a letter and a number.", 400, "weak_password");
     if (db.accounts.some((a) => a.email === email)) throw new ApiError("An account with this email already exists.", 409, "email_taken");
     if (db.accounts.some((a) => a.username.toLowerCase() === username.toLowerCase())) throw new ApiError("That username is taken.", 409, "username_taken");

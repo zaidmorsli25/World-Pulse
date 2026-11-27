@@ -8,6 +8,7 @@ import { FigureModal } from "../figures/FigureModal";
 import { CountryPanel } from "../map/CountryPanel";
 import { MapToolbar } from "../map/MapToolbar";
 import { WorldMap } from "../map/WorldMap";
+import { BigPictureModal, TrendCard } from "../trends/TrendPanels";
 import { AchievementsSection } from "../sections/Achievements";
 import { DailyBriefingSection } from "../sections/DailyBriefing";
 import { FiguresSection } from "../sections/Figures";
@@ -72,6 +73,9 @@ export function GameShell() {
         regionFocus={regionFocus}
         showLabels={settings.showLabels}
         showGraticule={settings.showGraticule}
+        trends={g.trends}
+        lensTrendId={section === "map" ? g.lensTrendId : null}
+        trendLinesAlways={settings.trendLinesAlways}
       />
 
       {/* ---------------- HUD ---------------- */}
@@ -90,7 +94,7 @@ export function GameShell() {
         </button>
 
         <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
-          <span className={`hud-pill hidden !py-1 text-xs font-semibold md:flex ${news?.mode === "demo" ? "!bg-[#5a3d06]/85" : ""}`} title={news?.updatedAt ? `Last news update: ${new Date(news.updatedAt).toLocaleString()}` : undefined}>
+          <span className={`hud-pill hidden !py-1 text-xs font-semibold min-[1440px]:flex ${news?.mode === "demo" ? "!bg-[#5a3d06]/85" : ""}`} title={news?.updatedAt ? `Last news update: ${new Date(news.updatedAt).toLocaleString()}` : undefined}>
             <span className={`h-2 w-2 rounded-full ${news?.mode === "live" ? "bg-land-400" : "bg-gold-400"}`} />
             {news?.mode === "live" ? "Live news" : "Demo scenarios"} · updated {timeAgo(news?.updatedAt ?? null)}
           </span>
@@ -172,6 +176,8 @@ export function GameShell() {
       )}
 
       {section === "map" && <CountryPanel />}
+      {section === "map" && <TrendCard />}
+      <BigPictureModal />
       <BriefingModal />
       <FigureModal />
       <Toasts />

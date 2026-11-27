@@ -18,7 +18,8 @@ const norm = (s: string) =>
     .replace(/[̀-ͯ]/g, "");
 
 export function MapToolbar({ filters, setFilters, onRegion, shown, total }: { filters: Filters; setFilters: (f: Filters) => void; onRegion: (r: string) => void; shown: number; total: number }) {
-  const { flyToCountry, openCountry, openFigure } = useGame();
+  const { flyToCountry, openCountry, openFigure, trends, lensTrendId, setLensTrend, settings, setSettings } = useGame();
+  const activeTrends = trends.filter((t) => t.status === "active" && t.links.filter((l) => l.live).length >= 2);
   const [q, setQ] = useState("");
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState(0);
@@ -118,6 +119,35 @@ export function MapToolbar({ filters, setFilters, onRegion, shown, total }: { fi
           </button>
         ))}
       </div>
+
+      {activeTrends.length > 0 && (
+        <div className="pointer-events-auto scroll-thin flex max-w-full items-center gap-1.5 overflow-x-auto rounded-2xl px-1 pb-1">
+          <span className="flex shrink-0 items-center gap-1 rounded-xl bg-white/90 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-navy-800 shadow">
+            <NavIcon.trends size={14} />
+            Trends
+          </span>
+          {activeTrends.map((t) => {
+            const on = lensTrendId === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setLensTrend(on ? null : t.id)}
+                aria-pressed={on}
+                title={t.cause}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border-2 px-2.5 py-0.5 text-xs font-semibold shadow backdrop-blur transition"
+                style={on ? { background: t.color, borderColor: "#fff", color: "#fff" } : { background: "rgba(13,26,46,0.75)", borderColor: "transparent", color: "#fff" }}
+              >
+                <span className="h-2.5 w-2.5 rounded-full ring-1 ring-white" style={{ background: t.color }} />
+                {t.name}
+              </button>
+            );
+          })}
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-navy-900/75 px-2.5 py-1 text-xs font-semibold text-white shadow backdrop-blur">
+            <input type="checkbox" className="h-3.5 w-3.5 accent-gold-400" checked={settings.trendLinesAlways} onChange={(e) => setSettings({ trendLinesAlways: e.target.checked })} />
+            Always show trend lines
+          </label>
+        </div>
+      )}
 
       <AnimatePresence>
         {showFilters && (

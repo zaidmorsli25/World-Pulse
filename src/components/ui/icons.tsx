@@ -209,6 +209,20 @@ export const NavIcon = {
       <path d="M5 16h22M16 5c3 3 4.5 7 4.5 11S19 24 16 27c-3-3-4.5-7-4.5-11S13 8 16 5z" />
     </S>
   ),
+  trends: (p: P) => (
+    <S {...p}>
+      <path d="M8 22Q12 10 16 13T25 8" strokeDasharray="0" />
+      <circle cx="7" cy="23" r="3" />
+      <circle cx="16" cy="13" r="3" />
+      <circle cx="25" cy="8" r="3" />
+    </S>
+  ),
+  book: (p: P) => (
+    <S {...p}>
+      <path d="M6 6.5A2.5 2.5 0 018.5 4H26v20H8.5A2.5 2.5 0 006 26.5z" />
+      <path d="M6 26.5A2.5 2.5 0 008.5 29H26v-5M11 9h10M11 13h7" />
+    </S>
+  ),
   check: (p: P) => (
     <S {...p}>
       <path d="M7 17l6 6L25 9" />

@@ -9,6 +9,7 @@ import { TIER_LABEL } from "../map/Markers";
 import { fmtDate, timeAgo } from "../ui/bits";
 import { CATEGORY_META, CategoryIcon, Coin, NavIcon, XpIcon } from "../ui/icons";
 import { Modal } from "../ui/Modal";
+import { EventTrends } from "../trends/TrendPanels";
 import { QuizView } from "./Quiz";
 
 const KIND: Record<ClaimKind, { label: string; cls: string; tip: string }> = {
@@ -140,6 +141,8 @@ function BriefingBody({ e }: { e: NewsEvent }) {
             <Claims claims={e.briefing.whatNext} />
             <p className="mt-2 text-xs text-navy-700/70">Items marked &quot;Outlook&quot; are possibilities, not certainties.</p>
           </Section>
+
+          <EventTrends eventId={e.id} />
 
           <section className="mb-6 rounded-2xl bg-navy-900 p-5 text-white" aria-label="Information sources">
             <h3 className="mb-3 flex items-center gap-2 font-display text-lg font-bold">

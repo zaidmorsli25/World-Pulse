@@ -210,7 +210,7 @@ export function Landing({ backend, onAuthed, initialMode, notice }: { backend: B
                 <label className="block">
                   <span className="mb-1 block text-sm font-semibold">Username</span>
                   <input className="input" autoComplete="nickname" required minLength={3} maxLength={20} pattern="[A-Za-z0-9_.\-]{3,20}" value={username} onChange={(e) => setUsername(e.target.value)} />
-                  <span className="mt-1 block text-xs text-navy-700/70">3–20 letters, numbers, dots, dashes or underscores.</span>
+                  <span className="mt-1 block text-xs text-navy-700/70">3 to 20 letters, numbers, dots, dashes or underscores.</span>
                 </label>
               )}
               {mode !== "forgot" && (

@@ -76,6 +76,7 @@ export function SettingsSection() {
           </div>
           <Toggle label="Country labels" hint="Show names on the map as you zoom in" on={settings.showLabels} onChange={(v) => setSettings({ showLabels: v })} />
           <Toggle label="Map grid lines" hint="Latitude and longitude lines" on={settings.showGraticule} onChange={(v) => setSettings({ showGraticule: v })} />
+          <Toggle label="Always show trend lines" hint="Keep the threads between linked stories on the map, not just while you hover a marker" on={settings.trendLinesAlways} onChange={(v) => setSettings({ trendLinesAlways: v })} />
         </Card>
 
         <Card title="Account">
