@@ -7,7 +7,7 @@ import type { Claim, ClaimKind, NewsEvent } from "@/lib/types";
 import { useGame } from "../game/GameProvider";
 import { TIER_LABEL } from "../map/Markers";
 import { fmtDate, timeAgo } from "../ui/bits";
-import { CATEGORY_META, CategoryIcon, Coin, NavIcon } from "../ui/icons";
+import { CATEGORY_META, CategoryIcon, Coin, NavIcon, XpIcon } from "../ui/icons";
 import { Modal } from "../ui/Modal";
 import { QuizView } from "./Quiz";
 
@@ -209,7 +209,7 @@ function BriefingBody({ e }: { e: NewsEvent }) {
               </span>
             ) : (
               <span className="flex items-center gap-1.5">
-                Earn up to <Coin size={16} /> <b>{maxCoins}</b> and XP
+                Earn up to <Coin size={16} /> <b>{maxCoins}</b> and <XpIcon size={16} /> XP
               </span>
             )}
           </div>

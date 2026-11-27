@@ -5,7 +5,7 @@ import { levelFromXp } from "@/lib/game/progression";
 import { RARITY_STYLE } from "@/lib/game/catalog";
 import type { Rarity } from "@/lib/types";
 import { useGame } from "../game/GameProvider";
-import { Coin } from "./icons";
+import { Coin, XpIcon } from "./icons";
 
 /** Number that counts up/down smoothly when it changes. */
 export function AnimatedNumber({ value, className }: { value: number; className?: string }) {
@@ -31,7 +31,8 @@ export function XPBar({ xp, compact }: { xp: number; compact?: boolean }) {
       {!compact && (
         <div className="mb-1 flex justify-between text-xs font-semibold text-navy-700">
           <span>Level {info.level}</span>
-          <span>
+          <span className="flex items-center gap-1">
+            <XpIcon size={15} />
             {info.xpIntoLevel} / {info.xpForLevel} XP
           </span>
         </div>
@@ -41,6 +42,16 @@ export function XPBar({ xp, compact }: { xp: number; compact?: boolean }) {
         <div className="absolute inset-0 animate-shimmer bg-[linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent)] bg-[length:200%_100%]" />
       </div>
     </div>
+  );
+}
+
+export function XpAmount({ value, size = 18, className = "" }: { value: number; size?: number; className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 font-display font-semibold ${className}`}>
+      <XpIcon size={size} />
+      <AnimatedNumber value={value} />
+      <span className="text-[0.8em] opacity-80">XP</span>
+    </span>
   );
 }
 

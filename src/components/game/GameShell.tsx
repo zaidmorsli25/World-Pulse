@@ -16,7 +16,7 @@ import { ProfileSection } from "../sections/Profile";
 import { SettingsSection } from "../sections/Settings";
 import { ShopSection } from "../sections/Shop";
 import { AvatarFigure } from "../ui/Avatar";
-import { CelebrationOverlay, CoinAmount, timeAgo, Toasts, XPBar } from "../ui/bits";
+import { CelebrationOverlay, CoinAmount, timeAgo, Toasts, XpAmount, XPBar } from "../ui/bits";
 import { NavIcon } from "../ui/icons";
 import { useGame, type Section } from "./GameProvider";
 import { WelcomeIntro } from "./WelcomeIntro";
@@ -100,6 +100,9 @@ export function GameShell() {
             </span>
             <span className="font-display font-semibold">{player.streak.count}</span>
           </span>
+          <button className="hud-pill hidden transition hover:brightness-110 sm:flex" onClick={() => go("profile")} aria-label={`${player.xp} XP. Open profile`}>
+            <XpAmount value={player.xp} />
+          </button>
           <button className="hud-pill transition hover:brightness-110" onClick={() => go("shop")} aria-label={`${player.coins} coins. Open shop`}>
             <CoinAmount value={player.coins} />
           </button>

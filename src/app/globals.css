@@ -25,6 +25,11 @@ body {
   overflow: hidden;
 }
 
+/* No pinch-zooming the page itself; the map handles pinch gestures on its own. */
+html {
+  touch-action: pan-x pan-y;
+}
+
 /* Visible keyboard focus everywhere */
 :focus-visible {
   outline: 3px solid #f7c552;

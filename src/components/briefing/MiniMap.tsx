@@ -2,6 +2,7 @@
 import { geoMercator, geoNaturalEarth1, geoPath } from "d3-geo";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { useMemo } from "react";
+import { placeBadges } from "@/lib/client/quizBadges";
 import { useWorld } from "@/lib/client/world";
 
 const LETTERS = ["A", "B", "C", "D", "E"];
@@ -26,10 +27,14 @@ export function QuizRegionMap({ countryIds, selected, correct, onPick, disabled 
     const path = geoPath(proj);
     return {
       all: world.features.map((f) => ({ id: String(f.id), d: path(f) ?? "" })),
-      cand: countryIds.map((id) => {
-        const f = world.byId.get(id);
-        return f ? { id, d: path(f) ?? "", c: path.centroid(f) } : null;
-      }),
+      cand: placeBadges(
+        countryIds.map((id) => {
+          const f = world.byId.get(id);
+          return f ? { id, d: path(f) ?? "", c: path.centroid(f), b: path.bounds(f) } : null;
+        }),
+        W,
+        H,
+      ),
     };
   }, [world, countryIds]);
 
@@ -55,9 +60,17 @@ export function QuizRegionMap({ countryIds, selected, correct, onPick, disabled 
               onClick={() => !disabled && onPick(i)}
             />
             {Number.isFinite(c.c[0]) && (
-              <g pointerEvents="none">
-                <circle cx={c.c[0]} cy={c.c[1]} r={11} fill="#0d1a2e" opacity={0.85} />
-                <text x={c.c[0]} y={c.c[1] + 4.5} textAnchor="middle" fontSize={13} fontWeight={700} fill="#fff" fontFamily="'Fredoka Variable', system-ui">
+              <g className={disabled ? "" : "cursor-pointer"} onClick={() => !disabled && onPick(i)}>
+                {c.small && (
+                  <>
+                    {/* small countries: an easy-to-hit target, and the letter sits to the side with a line pointing in */}
+                    <circle cx={c.c[0]} cy={c.c[1]} r={10} fill="transparent" />
+                    <line x1={c.c[0]} y1={c.c[1]} x2={c.badge[0]} y2={c.badge[1]} stroke="#0d1a2e" strokeWidth={1.6} opacity={0.85} />
+                    <circle cx={c.c[0]} cy={c.c[1]} r={2.2} fill="#0d1a2e" stroke="#fff" strokeWidth={1} />
+                  </>
+                )}
+                <circle cx={c.badge[0]} cy={c.badge[1]} r={11} fill={c.small ? fill : "#0d1a2e"} stroke={c.small ? "#0d1a2e" : "none"} strokeWidth={2} opacity={c.small ? 1 : 0.85} />
+                <text x={c.badge[0]} y={c.badge[1] + 4.5} textAnchor="middle" fontSize={13} fontWeight={700} fill={c.small ? "#0d1a2e" : "#fff"} fontFamily="'Fredoka Variable', system-ui" pointerEvents="none">
                   {LETTERS[i]}
                 </text>
               </g>
