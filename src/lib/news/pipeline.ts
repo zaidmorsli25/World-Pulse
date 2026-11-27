@@ -118,15 +118,46 @@ export function buildEvent(c: Cluster, g: GeneratedBriefing, now: Date): { event
   return { event, quiz: { id: quizId, eventId: id, category: event.category, questions: valid.map((q, i) => ({ ...q, id: `${quizId}-${i}` })) } };
 }
 
-export async function runIngestion(store: Store, opts: IngestOptions): Promise<IngestReport> {
+/** A story that needs a (new) briefing. Serializable, so a run can be split across requests. */
+export interface PendingCluster {
+  id: string;
+  articles: RawArticle[];
+  countries: string[];
+  latest: number;
+}
+
+/** First half of a run: fetch, cluster, keep unchanged briefings, and list stories needing a briefing. */
+export interface PreparedRun {
+  createdAt: string;
+  maxEvents: number;
+  report: IngestReport;
+  all: RawArticle[];
+  /** stories whose existing briefing is kept (with refreshed importance and sources) */
+  reusedEvents: NewsEvent[];
+  reusedQuizzes: Quiz[];
+  articleEvent: [string, string][];
+  /** most important first */
+  todo: PendingCluster[];
+}
+
+export interface BuiltStory {
+  clusterId: string;
+  event: NewsEvent;
+  quiz: Quiz;
+}
+
+const toCluster = (p: PendingCluster): Cluster => ({ articles: p.articles, countries: p.countries, latest: p.latest, tokens: new Set() });
+
+export async function prepareIngestion(store: Store, opts: { now?: Date; maxEvents?: number; log?: (msg: string) => void } = {}): Promise<PreparedRun> {
   const now = opts.now ?? new Date();
   const log = opts.log ?? (() => {});
   const report: IngestReport = { feeds: [], articles: 0, relevant: 0, clusters: 0, published: 0, reused: 0, deferred: 0, live: 0, rejected: [], updatedAt: now.toISOString() };
   const maxEvents = opts.maxEvents ?? NEWS.maxEvents;
 
-  const results = await Promise.allSettled(configuredFeeds().map(async (f) => ({ f, items: await fetchFeed(f) })));
+  const feeds = configuredFeeds();
+  const results = await Promise.allSettled(feeds.map(async (f) => ({ f, items: await fetchFeed(f) })));
   let all: RawArticle[] = [];
-  configuredFeeds().forEach((f, i) => {
+  feeds.forEach((f, i) => {
     const r = results[i];
     if (r.status === "fulfilled") {
       all.push(...r.value.items);
@@ -142,42 +173,26 @@ export async function runIngestion(store: Store, opts: IngestOptions): Promise<I
   report.clusters = clusters.length;
   log(`[ingest] ${all.length} articles, ${relevantArticles.length} relevant, ${clusters.length} clusters`);
 
-  if (!opts.summarizer) {
-    log("[ingest] ANTHROPIC_API_KEY not set: articles were collected but no briefings were generated.");
-    await store.saveLiveNews((await store.getLiveNews()) ?? { events: [], quizzes: [], updatedAt: null }, toStored(all, new Map(), now));
-    return report;
-  }
-
-  // Rank clusters by a preliminary score (without AI signals) and summarize the most important.
+  // Rank clusters by a preliminary score (without AI signals); the most important come first.
   const ranked = clusters
     .map((c) => ({ c, pre: scoreImportance({ ...clusterSignals(c, now), consequences: 0.5, significance: 0.5, category: categorize(c.articles[0].headline) }).score }))
     .sort((a, b) => b.pre - a.pre)
     .slice(0, maxEvents);
 
-  // Work incrementally: stories whose reporting has not changed keep their existing briefing, and
-  // new ones are summarized a few at a time within a time budget. Anything not reached is picked
-  // up by the next run, so a run never exceeds the host's function time limit and never loses work.
+  // Stories whose reporting has not substantially changed keep their existing briefing, so a
+  // briefing is not rewritten every time one more article joins a story.
   const previous = (await store.getLiveNews()) ?? { events: [], quizzes: [], updatedAt: null };
   const prevQuiz = new Map(previous.quizzes.map((q) => [q.id, q]));
   const prevByUrl = new Map<string, NewsEvent>();
   for (const e of previous.events) for (const src of e.sources) if (src.url) prevByUrl.set(src.url, e);
 
-  const events: NewsEvent[] = [];
-  const quizzes: Quiz[] = [];
-  const articleEvent = new Map<string, string>();
-  const usedPrev = new Set<string>();
-  const add = (event: NewsEvent, quiz: Quiz | undefined, c: Cluster) => {
-    if (events.some((e) => e.id === event.id)) return;
-    events.push(event);
-    if (quiz) quizzes.push(quiz);
-    for (const a of c.articles) articleEvent.set(a.id, event.id);
-  };
-
-  const todo: Cluster[] = [];
+  const reusedEvents: NewsEvent[] = [];
+  const reusedQuizzes: Quiz[] = [];
+  const articleEvent: [string, string][] = [];
+  const todo: PendingCluster[] = [];
   for (const { c } of ranked) {
     const own = c.articles.filter((a) => !a.syndicatedFrom);
     const urls = own.map((a) => a.url);
-    // The earlier event that most of this story's reporting already belongs to, if any.
     const counts = new Map<string, number>();
     for (const u of urls) {
       const id = prevByUrl.get(u)?.id;
@@ -188,44 +203,123 @@ export async function runIngestion(store: Store, opts: IngestOptions): Promise<I
     const fresh = urls.length - matched;
     const briefingAgeHours = prev ? (now.getTime() - Date.parse(prev.updatedAt)) / 3600_000 : Infinity;
     // Keep the existing briefing unless the story has substantially grown, or it has new
-    // reporting and the briefing is more than a day old. This avoids paying to rewrite a
-    // briefing every time one more article joins a story.
+    // reporting and the briefing is older than WP_NEWS_REWRITE_AFTER_HOURS.
     const keepBriefing = prev && matched / Math.max(1, urls.length) >= 0.5 && (fresh === 0 || briefingAgeHours < NEWS.rewriteAfterHours);
-    if (prev && keepBriefing) {
-      const quiz = prevQuiz.get(prev.quizId);
-      if (quiz) {
-        const signals = clusterSignals(c, now);
-        const b = prev.importance.breakdown;
-        const importance = b && typeof b.consequences === "number" && typeof b.significance === "number"
-          ? scoreImportance({ ...signals, consequences: b.consequences, significance: b.significance, category: prev.category })
-          : prev.importance;
-        const known = new Set(prev.sources.map((src) => src.url));
-        const sources = [
-          ...prev.sources,
-          ...own.filter((a) => !known.has(a.url)).map((a) => ({ id: a.id, publication: a.publication, headline: a.headline, url: a.url, publishedAt: a.publishedAt })),
-        ].sort((x, y) => Date.parse(y.publishedAt) - Date.parse(x.publishedAt));
-        usedPrev.add(prev.id);
-        add({ ...prev, importance, sources }, quiz, c);
-        report.reused++;
-        continue;
-      }
+    const quiz = prev ? prevQuiz.get(prev.quizId) : undefined;
+    if (prev && keepBriefing && quiz && !reusedEvents.some((e) => e.id === prev.id)) {
+      const b = prev.importance.breakdown;
+      const importance = b && typeof b.consequences === "number" && typeof b.significance === "number"
+        ? scoreImportance({ ...clusterSignals(c, now), consequences: b.consequences, significance: b.significance, category: prev.category })
+        : prev.importance;
+      const known = new Set(prev.sources.map((src) => src.url));
+      const sources = [
+        ...prev.sources,
+        ...own.filter((a) => !known.has(a.url)).map((a) => ({ id: a.id, publication: a.publication, headline: a.headline, url: a.url, publishedAt: a.publishedAt })),
+      ].sort((x, y) => Date.parse(y.publishedAt) - Date.parse(x.publishedAt));
+      reusedEvents.push({ ...prev, importance, sources });
+      reusedQuizzes.push(quiz);
+      for (const a of c.articles) articleEvent.push([a.id, prev.id]);
+      report.reused++;
+      continue;
     }
-    todo.push(c);
+    todo.push({ id: `c-${stableId(urls.slice().sort().join("|"))}`, articles: c.articles, countries: c.countries, latest: c.latest });
   }
+  return { createdAt: now.toISOString(), maxEvents, report, all, reusedEvents, reusedQuizzes, articleEvent, todo };
+}
 
+/** Turns a generated briefing for one pending story into a validated event, or a rejection reason. */
+export function buildStory(p: PendingCluster, g: GeneratedBriefing, now: Date): BuiltStory | { reason: string } {
+  const built = buildEvent(toCluster(p), g, now);
+  return "reason" in built ? built : { clusterId: p.id, ...built };
+}
+
+/** Second half of a run: merge kept, new and still-recent earlier stories, and save. */
+export async function finalizeIngestion(store: Store, run: PreparedRun, built: BuiltStory[], opts: { now?: Date; log?: (msg: string) => void } = {}): Promise<IngestReport> {
+  const now = opts.now ?? new Date();
+  const log = opts.log ?? (() => {});
+  const report = run.report;
+  const cutoff = now.getTime() - NEWS.maxArticleAgeHours * 3600_000;
+  const previous = (await store.getLiveNews()) ?? { events: [], quizzes: [], updatedAt: null };
+  const prevQuiz = new Map(previous.quizzes.map((q) => [q.id, q]));
+  const prevByUrl = new Map<string, NewsEvent>();
+  for (const e of previous.events) for (const src of e.sources) if (src.url) prevByUrl.set(src.url, e);
+
+  const events: NewsEvent[] = [];
+  const quizzes: Quiz[] = [];
+  const articleEvent = new Map(run.articleEvent);
+  const usedPrev = new Set(run.reusedEvents.map((e) => e.id));
+  const add = (event: NewsEvent, quiz: Quiz) => {
+    if (events.some((e) => e.id === event.id)) return false;
+    events.push(event);
+    quizzes.push(quiz);
+    return true;
+  };
+  run.reusedEvents.forEach((e) => {
+    const q = run.reusedQuizzes.find((x) => x.id === e.quizId);
+    if (q) add(e, q);
+  });
+  for (const b of built) {
+    const p = run.todo.find((t) => t.id === b.clusterId);
+    if (!p || !add(b.event, b.quiz)) continue;
+    for (const a of p.articles) {
+      articleEvent.set(a.id, b.event.id);
+      const old = prevByUrl.get(a.url);
+      if (old) usedPrev.add(old.id);
+    }
+    report.published++;
+    log(`[ingest] published: ${b.event.title} (${b.event.importance.tier} ${b.event.importance.score})`);
+  }
+  // Keep earlier stories that are still recent and were not replaced by a newer briefing.
+  for (const e of previous.events) {
+    if (usedPrev.has(e.id) || events.some((x) => x.id === e.id)) continue;
+    const latest = Math.max(...e.sources.map((src) => Date.parse(src.publishedAt)).filter(Number.isFinite), Date.parse(e.eventDate));
+    if (latest < cutoff) continue;
+    const quiz = prevQuiz.get(e.quizId);
+    if (quiz) add(e, quiz);
+  }
+  events.sort((a, b) => b.importance.score - a.importance.score);
+  const kept = events.slice(0, run.maxEvents);
+  const keptIds = new Set(kept.map((e) => e.id));
+  report.live = kept.length;
+  report.updatedAt = now.toISOString();
+  if (kept.length) {
+    const news: LiveNews = { events: kept, quizzes: quizzes.filter((q) => keptIds.has(q.eventId)), updatedAt: now.toISOString() };
+    await store.saveLiveNews(news, toStored(run.all, articleEvent, now));
+  } else {
+    await store.saveLiveNews(previous, toStored(run.all, articleEvent, now));
+  }
+  log(`[ingest] ${report.published} new, ${report.reused} unchanged, ${report.deferred} left for later, ${report.live} live`);
+  return report;
+}
+
+/**
+ * Complete run with the server's own summarizer (API-key mode). Without a summarizer, articles are
+ * collected and kept stories refreshed, but no new briefings are written: in subscription mode a
+ * scheduled Claude task writes them through /api/cron/candidates and /api/cron/publish instead.
+ */
+export async function runIngestion(store: Store, opts: IngestOptions): Promise<IngestReport> {
+  const now = opts.now ?? new Date();
+  const log = opts.log ?? (() => {});
+  const run = await prepareIngestion(store, { now, maxEvents: opts.maxEvents, log });
+  const report = run.report;
+  const built: BuiltStory[] = [];
+  const summarizer = opts.summarizer;
+  if (!summarizer) {
+    report.deferred = run.todo.length;
+    return finalizeIngestion(store, run, built, { now, log });
+  }
   const started = Date.now();
   const startBudget = opts.budgetMs ?? NEWS.ingestBudgetSeconds * 1000;
   const hardStop = started + startBudget + 75_000;
-  const summarizer = opts.summarizer;
   let next = 0;
   const worker = async () => {
-    while (next < todo.length) {
+    while (next < run.todo.length) {
       if (Date.now() - started > startBudget) return;
-      const c = todo[next++];
-      const title = c.articles[0].headline;
+      const p = run.todo[next++];
+      const title = p.articles[0].headline;
       const limits = () => ({ timeout: Math.max(5_000, hardStop - Date.now()), maxRetries: 1 });
       try {
-        const g = await summarizer.generate(c.articles, c.countries, limits());
+        const g = await summarizer.generate(p.articles, p.countries, limits());
         if (!g) {
           report.rejected.push({ title, reason: "model declined" });
           continue;
@@ -234,7 +328,7 @@ export async function runIngestion(store: Store, opts: IngestOptions): Promise<I
           report.deferred++;
           continue;
         }
-        const v = await summarizer.verify(c.articles, g, limits());
+        const v = await summarizer.verify(p.articles, g, limits());
         if (v) {
           const verdict = new Map(v.claims.map((x) => [x.id, x.verdict]));
           const keep = (prefix: string, allowBackground: boolean) => (_: unknown, i: number) => {
@@ -248,48 +342,17 @@ export async function runIngestion(store: Store, opts: IngestOptions): Promise<I
           const badQ = new Set(v.questions.filter((q) => !q.valid).map((q) => q.index));
           g.questions = g.questions.filter((_, i) => !badQ.has(i));
         }
-        const built = buildEvent(c, g, now);
-        if ("reason" in built) {
-          report.rejected.push({ title, reason: built.reason });
-          continue;
-        }
-        for (const a of c.articles) {
-          const old = prevByUrl.get(a.url);
-          if (old) usedPrev.add(old.id);
-        }
-        add(built.event, built.quiz, c);
-        report.published++;
-        log(`[ingest] published: ${built.event.title} (${built.event.importance.tier} ${built.event.importance.score})`);
+        const story = buildStory(p, g, now);
+        if ("reason" in story) report.rejected.push({ title, reason: story.reason });
+        else built.push(story);
       } catch (e) {
         report.rejected.push({ title, reason: `error: ${(e as Error).message}` });
       }
     }
   };
   await Promise.all(Array.from({ length: Math.max(1, opts.concurrency ?? NEWS.ingestConcurrency) }, worker));
-  report.deferred += todo.length - Math.min(next, todo.length);
-
-  // Keep earlier stories that are still recent and were not replaced by a newer briefing.
-  for (const e of previous.events) {
-    if (usedPrev.has(e.id) || events.some((x) => x.id === e.id)) continue;
-    const latest = Math.max(...e.sources.map((src) => Date.parse(src.publishedAt)).filter(Number.isFinite), Date.parse(e.eventDate));
-    if (latest < cutoff) continue;
-    const quiz = prevQuiz.get(e.quizId);
-    if (!quiz) continue;
-    events.push(e);
-    quizzes.push(quiz);
-  }
-  events.sort((a, b) => b.importance.score - a.importance.score);
-  const kept = events.slice(0, maxEvents);
-  const keptIds = new Set(kept.map((e) => e.id));
-  report.live = kept.length;
-  if (kept.length) {
-    const news: LiveNews = { events: kept, quizzes: quizzes.filter((q) => keptIds.has(q.eventId)), updatedAt: now.toISOString() };
-    await store.saveLiveNews(news, toStored(all, articleEvent, now));
-  } else {
-    await store.saveLiveNews(previous, toStored(all, articleEvent, now));
-  }
-  log(`[ingest] ${report.published} new, ${report.reused} unchanged, ${report.deferred} left for the next run, ${report.live} live`);
-  return report;
+  report.deferred += run.todo.length - Math.min(next, run.todo.length);
+  return finalizeIngestion(store, run, built, { now, log });
 }
 
 function toStored(all: RawArticle[], articleEvent: Map<string, string>, now: Date): StoredArticle[] {

@@ -58,7 +58,7 @@ const VerifySchema = z.object({
   questions: z.array(z.object({ index: z.number().int(), valid: z.boolean(), reason: z.string() })),
 });
 
-const SYSTEM = `You write short, neutral, educational news briefings for WorldPulse, a geopolitics learning game for people with little prior knowledge.
+export const BRIEFING_RULES = `You write short, neutral, educational news briefings for WorldPulse, a geopolitics learning game for people with little prior knowledge.
 
 Rules:
 - Use ONLY the reporting inside the <article> tags for anything about the event itself. Cite the article ids that support each claim in "sources".
@@ -106,7 +106,7 @@ export class Summarizer {
       model: this.model,
       max_tokens: 16000,
       output_config: { effort: "medium", format: zodOutputFormat(BriefingSchema) },
-      system: SYSTEM,
+      system: BRIEFING_RULES,
       messages: [
         {
           role: "user",

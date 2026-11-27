@@ -29,8 +29,8 @@ No configuration is needed to play locally. Accounts are stored in `data/local-d
 |---|---|---|
 | Production sessions | `AUTH_SECRET` | Production server refuses to start sessions |
 | Real accounts, email confirmation and password reset emails | Supabase project (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) and the SQL migration | Local JSON file; reset links are shown on screen in development only |
-| Live news briefings and quizzes | `ANTHROPIC_API_KEY` | Demo scenarios |
-| Scheduled refresh | `CRON_SECRET` (and a scheduler; a GitHub Actions workflow runs it every 3 hours, plus a daily Vercel cron) | Run `npm run ingest` manually |
+| Live news briefings and quizzes | A scheduled Claude task (see "News updates") with `CRON_SECRET`, or optionally `ANTHROPIC_API_KEY` | Demo scenarios |
+| Scheduled refresh | `CRON_SECRET` and the hourly scheduled Claude task | Stories stay until they are 3 days old |
 | Reuters | A licensed feed URL in `REUTERS_FEED_URL` | Reuters is skipped |
 | Commercial use of publisher feeds | Check each publisher's feed terms; some require a licence | |
 
@@ -40,11 +40,20 @@ Every variable is documented in [`.env.example`](.env.example).
 
 1. Create a Supabase project. In the SQL editor, run `supabase/migrations/0001_worldpulse.sql`. Enable Email auth and set the Site URL to your domain.
 2. Import the repository into Vercel. Set `AUTH_SECRET`, `NEXT_PUBLIC_SITE_URL`, the three Supabase variables, `ANTHROPIC_API_KEY` and `CRON_SECRET`.
-3. Deploy. On Vercel's free plan, cron jobs may run only once a day, so `vercel.json` runs `/api/cron/ingest` daily and `.github/workflows/news-refresh.yml` calls it every 3 hours (set the `SITE_URL` and `CRON_SECRET` repository secrets). Trigger the first run manually:
-   `curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/ingest`
+3. Deploy, then set up news updates as described below.
 4. Check `/api/health`, which reports the database, news mode and whether the summarizer is configured.
 
 Any Node host works. Use Supabase in production, because the local JSON store needs a persistent disk and a single instance.
+
+## News updates
+
+Briefings are written by an hourly scheduled Claude task that runs on the owner's Claude plan, so the site needs no Anthropic API key:
+
+1. `GET /api/cron/candidates` (with `Authorization: Bearer $CRON_SECRET`) fetches the approved feeds, clusters stories, keeps existing briefings for stories that have not substantially changed, and returns the stories that need one, with the writing rules, the JSON schema and the political figures directory.
+2. The task researches each story using only the six approved publications, writes the briefing and quiz, and checks them.
+3. `POST /api/cron/publish` sends them back. The server validates each one (schema, approved domains only, every claim about the event cited, every quiz answer taught by the briefing) before it goes live, and merges it with the stories already on the map.
+
+Optional API-key mode: with `ANTHROPIC_API_KEY` set, `GET /api/cron/ingest` does a complete run with the server writing briefings itself (`WP_SUMMARY_MODEL`, default `claude-haiku-5-5`). Call it from any scheduler.
 
 ## Architecture
 

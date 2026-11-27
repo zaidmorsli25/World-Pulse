@@ -16,6 +16,7 @@ interface DB {
   resetTokens: Record<string, { userId: string; expiresAt: string }>;
   news: LiveNews | null;
   articles: StoredArticle[];
+  meta?: Record<string, unknown>;
 }
 
 const empty = (): DB => ({ users: [], players: {}, ledger: [], attempts: [], resetTokens: {}, news: null, articles: [] });
@@ -119,6 +120,16 @@ export class LocalStore implements Store {
     const seen = new Set(db.articles.map((a) => a.url));
     for (const a of articles) if (!seen.has(a.url)) db.articles.push(a);
     db.articles = db.articles.slice(-5000);
+    await this.persist();
+  }
+  async getMeta<T = unknown>(key: string): Promise<T | null> {
+    return ((this.load().meta ?? {})[key] as T) ?? null;
+  }
+  async setMeta(key: string, value: unknown) {
+    const db = this.load();
+    db.meta = { ...(db.meta ?? {}) };
+    if (value === null) delete db.meta[key];
+    else db.meta[key] = copy(value);
     await this.persist();
   }
 }

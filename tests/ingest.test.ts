@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runIngestion } from "@/lib/news/pipeline";
+import { buildStory, finalizeIngestion, prepareIngestion, runIngestion } from "@/lib/news/pipeline";
+import type { GeneratedBriefing } from "@/lib/news/summarize";
 import type { Summarizer } from "@/lib/news/summarize";
 import type { LiveNews, Store, StoredArticle } from "@/lib/server/store/types";
 import type { NewsEvent, Quiz } from "@/lib/types";
@@ -84,5 +85,54 @@ describe("incremental ingestion", () => {
     expect(generate).not.toHaveBeenCalled();
     expect(report.deferred).toBe(1);
     expect(saved.at(-1)?.news.events.map((e) => e.id)).toEqual(["ev-old"]);
+  });
+
+  it("publishes a briefing written outside the server (subscription mode) after validating it", async () => {
+    const { store, saved } = memoryStore(null);
+    const run = await prepareIngestion(store, { now: NOW });
+    expect(run.todo).toHaveLength(1);
+    const p = run.todo[0];
+    const aid = p.articles[0].id;
+    const claim = (text: string, sources: string[] = [aid]) => ({ text, kind: "fact" as const, sources });
+    const g: GeneratedBriefing = {
+      relevant: true,
+      title: "France and Germany sign a defence treaty",
+      category: "diplomacy",
+      primaryCountry: "FRA",
+      countries: ["FRA", "DEU"],
+      figures: [],
+      consequences: 0.6,
+      significance: 0.6,
+      whatHappened: [claim("France and Germany signed a new defence pact at a summit in Paris."), claim("This claim cites nothing it may cite.", ["not-an-article"])],
+      background: [claim("France and Germany are the two largest economies in the European Union.", [])],
+      involved: [{ name: "France", kind: "country", ref: "FRA", role: "Host of the Paris summit" }],
+      whyItMatters: [claim("The pact deepens military cooperation between the two countries.", [])],
+      whatNext: [],
+      questions: [
+        { type: "multiple_choice", prompt: "Where was the pact signed?", choices: ["Paris", "Berlin", "Rome"], answerIndex: 0, explanation: "It was signed at a summit in Paris.", context: "", countryIds: [], figureIds: [], evidence: "summit in Paris" },
+        { type: "true_false", prompt: "The pact is about defence.", choices: ["True", "False"], answerIndex: 0, explanation: "It is a defence pact.", context: "", countryIds: [], figureIds: [], evidence: "new defence pact" },
+        { type: "cause_effect", prompt: "What does the pact deepen?", choices: ["Military cooperation", "Trade tariffs", "Football rivalry"], answerIndex: 0, explanation: "It deepens military cooperation.", context: "", countryIds: [], figureIds: [], evidence: "deepens military cooperation" },
+      ],
+    };
+    const story = buildStory(p, g, NOW);
+    if ("reason" in story) throw new Error(story.reason);
+    // Claims about the event must cite the story's own articles; the uncited one is dropped.
+    expect(story.event.briefing.whatHappened).toHaveLength(1);
+    const report = await finalizeIngestion(store, run, [story], { now: NOW });
+    expect(report.published).toBe(1);
+    expect(saved.at(-1)?.news.events[0].title).toBe("France and Germany sign a defence treaty");
+    expect(saved.at(-1)?.articles.find((a) => a.id === aid)?.eventId).toBe(story.event.id);
+  });
+
+  it("rejects a briefing whose quiz is not taught by the briefing", async () => {
+    const { store } = memoryStore(null);
+    const run = await prepareIngestion(store, { now: NOW });
+    const aid = run.todo[0].articles[0].id;
+    const g = {
+      relevant: true, title: "T", category: "diplomacy", primaryCountry: "FRA", countries: ["FRA"], figures: [], consequences: 0.5, significance: 0.5,
+      whatHappened: [{ text: "France and Germany signed a pact.", kind: "fact", sources: [aid] }], background: [], involved: [], whyItMatters: [], whatNext: [],
+      questions: [{ type: "multiple_choice", prompt: "Who won the cup?", choices: ["A", "B"], answerIndex: 0, explanation: "x", context: "", countryIds: [], figureIds: [], evidence: "won the cup" }],
+    } as GeneratedBriefing;
+    expect("reason" in buildStory(run.todo[0], g, NOW)).toBe(true);
   });
 });

@@ -52,4 +52,8 @@ export interface Store {
 
   getLiveNews(): Promise<LiveNews | null>;
   saveLiveNews(news: LiveNews, articles: StoredArticle[]): Promise<void>;
+
+  /** Small server-side key/value state (e.g. a news run waiting for briefings). null deletes. */
+  getMeta<T = unknown>(key: string): Promise<T | null>;
+  setMeta(key: string, value: unknown): Promise<void>;
 }

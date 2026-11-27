@@ -152,4 +152,16 @@ export class SupabaseStore implements Store {
     }
     await db.from("app_meta").upsert({ key: "news_updated_at", value: news.updatedAt, updated_at: new Date().toISOString() });
   }
+
+  async getMeta<T = unknown>(key: string): Promise<T | null> {
+    const { data, error } = await this.db.from("app_meta").select("value").eq("key", key).maybeSingle();
+    if (error) throw error;
+    return (data?.value as T) ?? null;
+  }
+  async setMeta(key: string, value: unknown) {
+    const { error } = value === null
+      ? await this.db.from("app_meta").delete().eq("key", key)
+      : await this.db.from("app_meta").upsert({ key, value, updated_at: new Date().toISOString() });
+    if (error) throw error;
+  }
 }
