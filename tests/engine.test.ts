@@ -144,6 +144,12 @@ describe("streaks", () => {
 describe("profile", () => {
   it("validates avatar options and exploration ids", () => {
     expect(() => updateAvatar(fresh(), { skin: 99, hair: 0, hairColor: 0, backdrop: 0 }, T0)).toThrow(GameError);
+    expect(() => updateAvatar(fresh(), { skin: 0, hair: 0, hairColor: 0, backdrop: 0, eyes: 9 }, T0)).toThrow(GameError);
+    expect(() => updateAvatar(fresh(), { skin: 0, hair: 0, hairColor: 0, backdrop: 0, mouth: 1.5 }, T0)).toThrow(GameError);
+    // old avatars (4 fields) still save; new optional parts are kept, unknown keys dropped
+    expect(updateAvatar(fresh(), { skin: 1, hair: 2, hairColor: 3, backdrop: 4 }, T0).state.avatar).toEqual({ skin: 1, hair: 2, hairColor: 3, backdrop: 4 });
+    const full = { skin: 7, hair: 13, hairColor: 11, backdrop: 9, face: 3, eyes: 4, eyeColor: 4, brows: 4, mouth: 4, facialHair: 4, glasses: 3, details: 3 };
+    expect(updateAvatar(fresh(), { ...full, extra: 1 } as never, T0).state.avatar).toEqual(full);
     expect(() => exploreCountry(fresh(), "NOPE", T0)).toThrow(GameError);
     const once = exploreCountry(fresh(), "KEN", T0).state;
     const twice = exploreCountry(once, "KEN", T0);
